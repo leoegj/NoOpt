@@ -224,10 +224,16 @@ Blacklist config files:
 scope_mode.conf       # global or deny
 deny_packages.conf    # one package name per line
 deny_uids.conf        # one UID per line
+target_wait_seconds.conf
+package_wait_seconds.conf
 ```
 
 The WebUI is available from KernelSU Manager after installing the module. It
 edits these files and can reload `nohello.ko` without requiring a reboot.
+
+In deny scope, `service.sh` waits for package UID resolution before loading.
+It also waits for configured paths so late-created `/dev` entries have a chance
+to exist before `nohello.ko` resolves target inodes.
 
 Install `out/nohello-ksu.zip` in KernelSU Manager, reboot, then check:
 

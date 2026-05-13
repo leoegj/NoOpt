@@ -7,7 +7,9 @@ param(
     [ValidateSet("global", "deny")]
     [string]$ScopeMode = "global",
     [string]$DenyPackage = "",
-    [string]$DenyUid = ""
+    [string]$DenyUid = "",
+    [int]$TargetWaitSeconds = 60,
+    [int]$PackageWaitSeconds = 60
 )
 
 $ErrorActionPreference = "Stop"
@@ -54,12 +56,36 @@ Set-Content -LiteralPath (Join-Path $StageDir "hide_dirents.conf") -Value $HideD
 Set-Content -LiteralPath (Join-Path $StageDir "scope_mode.conf") -Value $ScopeMode -NoNewline -Encoding ASCII
 Set-Content -LiteralPath (Join-Path $StageDir "deny_packages.conf") -Value $DenyPackageList -Encoding ASCII
 Set-Content -LiteralPath (Join-Path $StageDir "deny_uids.conf") -Value $DenyUidList -Encoding ASCII
+Set-Content -LiteralPath (Join-Path $StageDir "target_wait_seconds.conf") -Value $TargetWaitSeconds -NoNewline -Encoding ASCII
+Set-Content -LiteralPath (Join-Path $StageDir "package_wait_seconds.conf") -Value $PackageWaitSeconds -NoNewline -Encoding ASCII
+
+$TextExtensions = @(".conf", ".css", ".html", ".js", ".md", ".prop", ".sh")
+Get-ChildItem -LiteralPath $StageDir -Recurse -File | ForEach-Object {
+    if ($TextExtensions -contains $_.Extension) {
+        $Content = [System.IO.File]::ReadAllText($_.FullName)
+        $Content = $Content -replace "`r`n", "`n"
+        $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+        [System.IO.File]::WriteAllText($_.FullName, $Content, $Utf8NoBom)
+    }
+}
 
 if (Test-Path -LiteralPath $Output) {
     Remove-Item -LiteralPath $Output -Force
 }
 
-Compress-Archive -Path (Join-Path $StageDir "*") -DestinationPath $Output -Force
+Add-Type -AssemblyName System.IO.Compression
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$StageFullPath = (Resolve-Path -LiteralPath $StageDir).Path.TrimEnd("\", "/")
+$Zip = [System.IO.Compression.ZipFile]::Open($Output, [System.IO.Compression.ZipArchiveMode]::Create)
+try {
+    Get-ChildItem -LiteralPath $StageDir -Recurse -File | ForEach-Object {
+        $EntryName = $_.FullName.Substring($StageFullPath.Length).TrimStart("\", "/").Replace("\", "/")
+        [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($Zip, $_.FullName, $EntryName) | Out-Null
+    }
+}
+finally {
+    $Zip.Dispose()
+}
 
 Write-Host "Created KernelSU package: $Output"
 Write-Host "Target paths: $($TargetList -join ', ')"
@@ -67,3 +93,5 @@ Write-Host "Hide dirents: $HideDirents"
 Write-Host "Scope mode: $ScopeMode"
 Write-Host "Deny packages: $($DenyPackageList -join ', ')"
 Write-Host "Deny UIDs: $($DenyUidList -join ', ')"
+Write-Host "Target wait seconds: $TargetWaitSeconds"
+Write-Host "Package wait seconds: $PackageWaitSeconds"
