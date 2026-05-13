@@ -3,7 +3,7 @@ set -eu
 
 KO_PATH="${1:-kernel/nohello.ko}"
 OUTPUT="${2:-out/nohello-ksu.zip}"
-TARGET_PATH="${TARGET_PATH:-/data/local/tmp/nohello}"
+TARGET_PATHS="${TARGET_PATHS:-${TARGET_PATH:-/data/local/tmp/nohello}}"
 HIDE_DIRENTS="${HIDE_DIRENTS:-1}"
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -41,7 +41,7 @@ mkdir -p "$STAGE_DIR" "$(dirname -- "$OUTPUT")"
 
 cp -R "$TEMPLATE_DIR"/. "$STAGE_DIR"/
 cp "$KO_PATH" "$STAGE_DIR/nohello.ko"
-printf '%s' "$TARGET_PATH" > "$STAGE_DIR/target_path.conf"
+printf '%s' "$TARGET_PATHS" | tr ',' '\n' > "$STAGE_DIR/target_path.conf"
 printf '%s' "$HIDE_DIRENTS" > "$STAGE_DIR/hide_dirents.conf"
 chmod 0755 "$STAGE_DIR/service.sh" "$STAGE_DIR/uninstall.sh"
 
@@ -49,5 +49,5 @@ rm -f "$OUTPUT"
 (cd "$STAGE_DIR" && zip -q -r "$OUTPUT" .)
 
 echo "Created KernelSU package: $OUTPUT"
-echo "Target path: $TARGET_PATH"
+echo "Target paths: $TARGET_PATHS"
 echo "Hide dirents: $HIDE_DIRENTS"

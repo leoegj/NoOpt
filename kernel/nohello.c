@@ -17,26 +17,120 @@
 #include <linux/version.h>
 #include <linux/dirent.h>
 #include <linux/slab.h>
+#include <linux/string.h>
 #include <linux/uaccess.h>
 
 /* ---------- module parameter ---------- */
+#define MAX_HIDE_TARGETS 16
+#define TARGET_PATHS_LEN 2048
+
 static char *target_path = "/data/local/tmp/nohello";
 module_param(target_path, charp, 0644);
-MODULE_PARM_DESC(target_path, "Absolute path to hide");
+MODULE_PARM_DESC(target_path, "Legacy single absolute path to hide");
+
+static char target_paths[TARGET_PATHS_LEN];
+module_param_string(target_paths, target_paths, sizeof(target_paths), 0644);
+MODULE_PARM_DESC(target_paths, "Comma-separated absolute paths to hide");
 
 static bool hide_dirents = true;
 module_param(hide_dirents, bool, 0644);
 MODULE_PARM_DESC(hide_dirents, "Hide target from getdents64 directory listings");
 
 /* system-unique target identifiers */
-static dev_t target_dev;
-static unsigned long long target_ino;
+struct hidden_target {
+	dev_t dev;
+	unsigned long long ino;
+};
+
+static struct hidden_target targets[MAX_HIDE_TARGETS];
+static unsigned int target_count;
 
 /* ---------- helper ---------- */
 static inline bool is_target_inode(const struct inode *inode)
 {
-	return inode && inode->i_ino == target_ino &&
-	       inode->i_sb->s_dev == target_dev;
+	unsigned int i;
+
+	if (!inode)
+		return false;
+
+	for (i = 0; i < target_count; i++) {
+		if (inode->i_ino == targets[i].ino &&
+		    inode->i_sb->s_dev == targets[i].dev)
+			return true;
+	}
+
+	return false;
+}
+
+static inline bool is_target_ino(__u64 ino)
+{
+	unsigned int i;
+
+	for (i = 0; i < target_count; i++) {
+		if (ino == (__u64)targets[i].ino)
+			return true;
+	}
+
+	return false;
+}
+
+static int add_target_path(const char *path_name)
+{
+	struct path path;
+	struct inode *inode;
+	int ret;
+
+	if (target_count >= MAX_HIDE_TARGETS) {
+		pr_warn("nohello: too many targets, skip %s\n", path_name);
+		return -ENOSPC;
+	}
+
+	ret = kern_path(path_name, 0, &path);
+	if (ret) {
+		pr_warn("nohello: %s not found (err=%d), skip\n", path_name,
+			ret);
+		return ret;
+	}
+
+	inode = d_inode(path.dentry);
+	targets[target_count].ino = inode->i_ino;
+	targets[target_count].dev = inode->i_sb->s_dev;
+	pr_info("nohello: target[%u] %s ino=%llu dev=%u:%u\n",
+		target_count, path_name, targets[target_count].ino,
+		MAJOR(targets[target_count].dev),
+		MINOR(targets[target_count].dev));
+	target_count++;
+	path_put(&path);
+
+	return 0;
+}
+
+static int resolve_target_paths(const char *paths)
+{
+	char *buf, *cursor, *item;
+	int ret = -ENOENT;
+
+	buf = kstrdup(paths, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	cursor = buf;
+	while ((item = strsep(&cursor, ",")) != NULL) {
+		item = strim(item);
+		if (!*item)
+			continue;
+
+		ret = add_target_path(item);
+		if (ret && target_count == 0)
+			continue;
+	}
+
+	kfree(buf);
+
+	if (!target_count)
+		return ret;
+
+	return 0;
 }
 
 /* ---------- security_inode_permission ---------- */
@@ -167,12 +261,15 @@ static int getdents_exit(struct kretprobe_instance *ri, struct pt_regs *regs)
 		if (reclen < min_reclen || reclen > new_len - bpos)
 			break;
 
-		if (cur->d_ino == (__u64)target_ino) {
+		if (is_target_ino(cur->d_ino)) {
 			modified = true;
 			if (prev) {
-				prev->d_reclen += reclen;
-				bpos += reclen;
-				continue;
+				if ((unsigned int)prev->d_reclen + reclen <=
+				    65535u) {
+					prev->d_reclen += reclen;
+					bpos += reclen;
+					continue;
+				}
 			}
 
 			new_len -= reclen;
@@ -204,20 +301,14 @@ out:
 /* ---------- module init / exit ---------- */
 static int __init nohello_init(void)
 {
-	struct path path;
+	const char *paths = target_paths[0] ? target_paths : target_path;
 	int ret;
 
-	ret = kern_path(target_path, 0, &path);
+	ret = resolve_target_paths(paths);
 	if (ret) {
-		pr_err("nohello: %s not found (err=%d)\n", target_path, ret);
-		return -ENOENT;
+		pr_err("nohello: no valid targets (err=%d)\n", ret);
+		return ret;
 	}
-
-	target_ino = d_inode(path.dentry)->i_ino;
-	target_dev = d_inode(path.dentry)->i_sb->s_dev;
-	pr_info("nohello: target ino=%llu dev=%u:%u\n",
-		target_ino, MAJOR(target_dev), MINOR(target_dev));
-	path_put(&path);
 
 	/* security_inode_permission */
 	kp_inode_perm.kp.symbol_name = "security_inode_permission";
@@ -270,7 +361,7 @@ static int __init nohello_init(void)
 			"not filtered\n");
 	}
 
-	pr_info("nohello: loaded -- %s is now hidden\n", target_path);
+	pr_info("nohello: loaded -- %u target(s) hidden\n", target_count);
 	return 0;
 }
 
@@ -283,7 +374,8 @@ static void __exit nohello_exit(void)
 		getdents_registered = false;
 	}
 
-	pr_info("nohello: unloaded -- %s is visible again\n", target_path);
+	pr_info("nohello: unloaded -- %u target(s) visible again\n",
+		target_count);
 }
 
 module_init(nohello_init);

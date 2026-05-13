@@ -28,6 +28,11 @@ if (-not (Test-Path -LiteralPath $TemplateDir)) {
     throw "Missing KernelSU template: $TemplateDir"
 }
 
+$TargetList = $TargetPath -split "," | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+if (-not $TargetList) {
+    throw "No target paths were provided"
+}
+
 if (Test-Path -LiteralPath $StageDir) {
     Remove-Item -LiteralPath $StageDir -Recurse -Force
 }
@@ -37,7 +42,7 @@ New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Output) | Out-Nul
 
 Copy-Item -Path (Join-Path $TemplateDir "*") -Destination $StageDir -Recurse -Force
 Copy-Item -LiteralPath $KoPath -Destination (Join-Path $StageDir "nohello.ko") -Force
-Set-Content -LiteralPath (Join-Path $StageDir "target_path.conf") -Value $TargetPath -NoNewline -Encoding ASCII
+Set-Content -LiteralPath (Join-Path $StageDir "target_path.conf") -Value $TargetList -Encoding ASCII
 Set-Content -LiteralPath (Join-Path $StageDir "hide_dirents.conf") -Value $HideDirents -NoNewline -Encoding ASCII
 
 if (Test-Path -LiteralPath $Output) {
@@ -47,5 +52,5 @@ if (Test-Path -LiteralPath $Output) {
 Compress-Archive -Path (Join-Path $StageDir "*") -DestinationPath $Output -Force
 
 Write-Host "Created KernelSU package: $Output"
-Write-Host "Target path: $TargetPath"
+Write-Host "Target paths: $($TargetList -join ', ')"
 Write-Host "Hide dirents: $HideDirents"

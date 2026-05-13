@@ -2,16 +2,21 @@
 
 ## Multi-path hiding
 
-Current status: `nohello.ko` hides one path per module load through the
-`target_path` module parameter.
+Status: implemented.
 
-Planned direction:
+Current behavior:
 
-- Accept multiple target paths from a module parameter or config file.
-- Resolve each path to a `(dev, inode)` pair at module load time.
-- Replace the single `target_dev` / `target_ino` check with a small target
-  table and loop-based matcher.
-- Decide how to handle paths that do not exist at load time.
+- `target_path` remains available for a legacy single path.
+- `target_paths` accepts comma-separated paths.
+- The KernelSU wrapper accepts one path per line in `target_path.conf`.
+- Each existing path is resolved to a `(dev, inode)` pair at module load time.
+- Missing paths are skipped; loading fails only if no configured path exists.
+
+Follow-up ideas:
+
+- Add duplicate target detection.
+- Add a runtime debug log that prints the number of hidden entries removed from
+  each `getdents64` buffer.
 
 ## Scoped hiding / allowlist
 
@@ -24,4 +29,3 @@ Planned direction:
 - Let trusted apps or shell/root still access the file while hiding it from
   other apps.
 - Keep the default demo behavior simple, but document the risk clearly.
-

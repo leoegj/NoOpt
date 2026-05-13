@@ -1,8 +1,8 @@
 # NoHello LKM Demo
 
 NoHello is a small Android arm64 / GKI external kernel module demo. It hides
-one configured file path from common filesystem operations by resolving the
-target inode at load time and installing kretprobes around VFS-related paths.
+configured file paths from common filesystem operations by resolving target
+inodes at load time and installing kretprobes around VFS-related paths.
 
 This repository is intended for controlled lab/demo use on your own device or
 another device where you have explicit permission.
@@ -22,16 +22,22 @@ The default demo target is:
 /data/local/tmp/nohello
 ```
 
-You can override it at load time:
+You can override it at load time with the legacy single-path parameter:
 
 ```sh
 insmod /data/local/tmp/nohello.ko target_path=/data/local/tmp/nohello
 ```
 
+For multiple paths, use `target_paths` with comma-separated absolute paths:
+
+```sh
+insmod /data/local/tmp/nohello.ko target_paths=/data/local/tmp/a,/data/local/tmp/b
+```
+
 Directory listing filtering can be disabled while keeping direct access hidden:
 
 ```sh
-insmod /data/local/tmp/nohello.ko target_path=/data/local/tmp/nohello hide_dirents=0
+insmod /data/local/tmp/nohello.ko target_paths=/data/local/tmp/a,/data/local/tmp/b hide_dirents=0
 ```
 
 ## Current Status
@@ -43,14 +49,15 @@ Implemented:
 - Hides direct access through `security_inode_permission`.
 - Hides stat/getattr-style checks through `security_inode_getattr`.
 - Filters `getdents64` results so the target is removed from directory lists.
+- Supports up to 16 configured target paths per module load.
 - Provides a KernelSU wrapper template for boot-time loading.
 - Provides a `hide_dirents` fallback parameter. Set it to `0` if directory
   enumeration is unstable on a device.
 
 Known limitations:
 
-- The target path must exist before `insmod`, because the module stores its
-  `(dev, inode)` identity at load time.
+- At least one target path must exist before `insmod`, because the module
+  stores `(dev, inode)` identities at load time. Missing paths are skipped.
 - Directory-list filtering compares `d_ino`, because `getdents64` does not
   expose the device id in each returned entry. A same-inode file on another
   filesystem could be hidden from a listing, though direct access checks still
@@ -118,6 +125,12 @@ insmod /data/local/tmp/nohello.ko target_path=/data/local/tmp/nohello
 dmesg | grep nohello
 ```
 
+To hide multiple paths manually:
+
+```sh
+insmod /data/local/tmp/nohello.ko target_paths=/data/local/tmp/a,/data/local/tmp/b
+```
+
 Verify:
 
 ```sh
@@ -145,6 +158,12 @@ Windows PowerShell:
 .\tools\package_ksu.ps1 -KoPath .\kernel\nohello.ko -Output .\out\nohello-ksu.zip -TargetPath /data/local/tmp/nohello
 ```
 
+Pass comma-separated values to `-TargetPath` for a multi-path package:
+
+```powershell
+.\tools\package_ksu.ps1 -KoPath .\kernel\nohello.ko -Output .\out\nohello-ksu.zip -TargetPath "/data/local/tmp/a,/data/local/tmp/b"
+```
+
 Use `-HideDirents 0` if you want direct-access hiding only.
 
 Linux/macOS shell:
@@ -153,7 +172,20 @@ Linux/macOS shell:
 TARGET_PATH=/data/local/tmp/nohello ./tools/package_ksu.sh kernel/nohello.ko out/nohello-ksu.zip
 ```
 
+For multiple paths:
+
+```sh
+TARGET_PATHS=/data/local/tmp/a,/data/local/tmp/b ./tools/package_ksu.sh kernel/nohello.ko out/nohello-ksu.zip
+```
+
 Use `HIDE_DIRENTS=0` if you want direct-access hiding only.
+
+Inside the KernelSU module, `target_path.conf` supports one path per line:
+
+```text
+/data/local/tmp/a
+/data/local/tmp/b
+```
 
 Install `out/nohello-ksu.zip` in KernelSU Manager, reboot, then check:
 

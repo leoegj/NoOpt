@@ -64,6 +64,14 @@ rmmod nohello
 insmod /data/local/tmp/nohello.ko target_path=/data/local/tmp/nohello hide_dirents=0
 ```
 
+To hide more than one path manually, use `target_paths`:
+
+```sh
+echo "demo secret a" > /data/local/tmp/nohello-a
+echo "demo secret b" > /data/local/tmp/nohello-b
+insmod /data/local/tmp/nohello.ko target_paths=/data/local/tmp/nohello-a,/data/local/tmp/nohello-b
+```
+
 ## 4. Verify Hiding
 
 ```sh
@@ -99,6 +107,12 @@ Windows:
 .\tools\package_ksu.ps1 -KoPath .\kernel\nohello.ko -Output .\out\nohello-ksu.zip -TargetPath /data/local/tmp/nohello
 ```
 
+Multi-path package:
+
+```powershell
+.\tools\package_ksu.ps1 -KoPath .\kernel\nohello.ko -Output .\out\nohello-ksu.zip -TargetPath "/data/local/tmp/nohello-a,/data/local/tmp/nohello-b"
+```
+
 Direct-access-only fallback package:
 
 ```powershell
@@ -111,6 +125,12 @@ Linux/macOS:
 TARGET_PATH=/data/local/tmp/nohello ./tools/package_ksu.sh kernel/nohello.ko out/nohello-ksu.zip
 ```
 
+Multi-path package:
+
+```sh
+TARGET_PATHS=/data/local/tmp/nohello-a,/data/local/tmp/nohello-b ./tools/package_ksu.sh kernel/nohello.ko out/nohello-ksu.zip
+```
+
 Install `out/nohello-ksu.zip` from KernelSU Manager and reboot. The bundled
 `service.sh` loads `nohello.ko` only when the target file already exists, which
 keeps the demo easier to recover from.
@@ -120,7 +140,7 @@ keeps the demo easier to recover from.
 `insmod: failed: No such file or directory`
 
 The target path did not exist when the module loaded. Create the file first, or
-change `target_path`.
+change `target_path` / `target_paths`.
 
 `Exec format error` or `Invalid module format`
 
