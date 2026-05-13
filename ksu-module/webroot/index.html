@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
@@ -10,70 +10,66 @@
 	<header class="topbar">
 		<div>
 			<h1>NoHello</h1>
-			<p id="statusText">Loading...</p>
+			<p id="statusText">正在加载...</p>
 		</div>
-		<button id="refreshBtn" type="button">Refresh</button>
+		<button id="refreshBtn" type="button">刷新</button>
 	</header>
 
 	<main>
 		<section class="panel">
 			<div class="sectionTitle">
-				<h2>Hidden Paths</h2>
-				<button id="addPathBtn" type="button">Add</button>
+				<h2>隐藏路径</h2>
+				<button id="addPathBtn" type="button">添加</button>
 			</div>
 			<div id="pathList" class="stack"></div>
 		</section>
 
 		<section class="panel">
 			<div class="sectionTitle">
-				<h2>Scope</h2>
+				<h2>作用范围</h2>
 			</div>
 			<div class="segmented">
 				<label>
 					<input type="radio" name="scope" value="global">
-					<span>Global</span>
+					<span>全局</span>
 				</label>
 				<label>
 					<input type="radio" name="scope" value="deny">
-					<span>Blacklist</span>
+					<span>黑名单</span>
 				</label>
 			</div>
 			<label class="switchRow">
-				<span>Hide parent directory entries</span>
+				<span>隐藏上级目录列表项</span>
 				<input id="hideDirentsInput" type="checkbox">
-			</label>
-			<label class="switchRow">
-				<span>Hide proc mount text</span>
-				<input id="hideMountsInput" type="checkbox">
 			</label>
 		</section>
 
 		<section class="panel">
 			<div class="sectionTitle">
-				<h2>App Blacklist</h2>
+				<h2>应用黑名单</h2>
 				<div class="inlineControls">
 					<label class="miniToggle">
 						<input id="showSystemInput" type="checkbox">
-						<span>System</span>
+						<span>系统应用</span>
 					</label>
-					<button id="loadAppsBtn" type="button">Load</button>
+					<button id="loadAppsBtn" type="button">加载</button>
 				</div>
 			</div>
-			<input id="searchInput" class="search" type="search" placeholder="Search package name">
+			<input id="searchInput" class="search" type="search" placeholder="搜索包名">
 			<div id="appList" class="appList"></div>
 		</section>
 
 		<section class="panel">
 			<div class="sectionTitle">
-				<h2>Direct UIDs</h2>
+				<h2>直接填写 UID</h2>
 			</div>
-			<textarea id="denyUidsInput" rows="4" spellcheck="false" placeholder="One UID per line"></textarea>
+			<textarea id="denyUidsInput" rows="4" spellcheck="false" placeholder="每行一个 UID"></textarea>
 		</section>
 	</main>
 
 	<footer class="actions">
-		<button id="saveBtn" type="button">Save</button>
-		<button id="reloadBtn" type="button">Save & Reload</button>
+		<button id="saveBtn" type="button">保存</button>
+		<button id="reloadBtn" type="button">保存并重载</button>
 	</footer>
 
 	<div id="toast" class="toast" hidden></div>

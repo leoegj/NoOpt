@@ -1,11 +1,18 @@
 const MODDIR = "/data/adb/modules/nohello-demo";
 const CONFIGDIR = "/data/adb/nohello";
-const DEFAULT_TARGET_PATH = "/data/incremental/MT_data_app_vmdl192";
-const DEFAULT_DENY_PACKAGE = "me.garfieldhan.holmes";
+const DEFAULT_TARGET_PATHS = [
+	"/dev/cpuset/scene-daemon",
+	"/dev/scene",
+	"/system_ext/app/SoterService",
+];
+const DEFAULT_DENY_PACKAGES = [
+	"com.chunqiunativecheck",
+	"com.eltavine.duckdetector",
+	"luna.safe.luna",
+];
 const files = {
 	targets: `${CONFIGDIR}/target_path.conf`,
 	hideDirents: `${CONFIGDIR}/hide_dirents.conf`,
-	hideMounts: `${CONFIGDIR}/hide_mounts.conf`,
 	scope: `${CONFIGDIR}/scope_mode.conf`,
 	denyPackages: `${CONFIGDIR}/deny_packages.conf`,
 	denyUids: `${CONFIGDIR}/deny_uids.conf`,
@@ -96,7 +103,7 @@ function setBusy(nextBusy, message) {
 
 async function runAction(message, action) {
 	if (busy) {
-		showToast("Busy, please wait");
+		showToast("正在处理，请稍等");
 		return;
 	}
 
@@ -131,7 +138,7 @@ function linesFromText(text) {
 
 function renderPaths(paths) {
 	pathList.textContent = "";
-	const list = paths.length ? paths : [DEFAULT_TARGET_PATH];
+	const list = paths.length ? paths : DEFAULT_TARGET_PATHS;
 	for (const path of list) {
 		const row = document.createElement("div");
 		row.className = "pathRow";
@@ -140,7 +147,7 @@ function renderPaths(paths) {
 		input.value = path;
 		const remove = document.createElement("button");
 		remove.type = "button";
-		remove.textContent = "Del";
+		remove.textContent = "删";
 		remove.addEventListener("click", () => {
 			row.remove();
 		});
@@ -192,7 +199,7 @@ function renderApps() {
 }
 
 async function loadApps() {
-	statusText.textContent = "Loading apps...";
+	statusText.textContent = "正在加载应用...";
 	const showSystem = $("#showSystemInput").checked;
 	const command = showSystem ? "pm list packages -U" : "pm list packages -U -3";
 	const output = await execShell(command);
@@ -201,14 +208,13 @@ async function loadApps() {
 		.filter(Boolean)
 		.sort((a, b) => a.pkg.localeCompare(b.pkg));
 	renderApps();
-	showToast(`Loaded ${apps.length} apps`);
+	showToast(`已加载 ${apps.length} 个应用`);
 }
 
 async function refreshConfig() {
-	statusText.textContent = "Refreshing...";
+	statusText.textContent = "正在刷新...";
 	const targetText = await readFile(files.targets);
 	const hideText = await readFile(files.hideDirents);
-	const mountText = await readFile(files.hideMounts);
 	const scopeText = await readFile(files.scope);
 	const pkgText = await readFile(files.denyPackages);
 	const uidText = await readFile(files.denyUids);
@@ -216,37 +222,35 @@ async function refreshConfig() {
 
 	renderPaths(linesFromText(targetText));
 	$("#hideDirentsInput").checked = (hideText.trim() || "1") !== "0";
-	$("#hideMountsInput").checked = (mountText.trim() || "1") !== "0";
 	const scope = (scopeText.trim() || "deny") === "global" ? "global" : "deny";
 	document.querySelector(`input[name="scope"][value="${scope}"]`).checked = true;
 	const packageLines = linesFromText(pkgText);
-	selectedPackages = new Set(packageLines.length ? packageLines : [DEFAULT_DENY_PACKAGE]);
+	selectedPackages = new Set(packageLines.length ? packageLines : DEFAULT_DENY_PACKAGES);
 	$("#denyUidsInput").value = linesFromText(uidText).join("\n");
-	statusText.textContent = procText.trim() ? "Module loaded" : "Module not loaded";
+	statusText.textContent = procText.trim() ? "模块已加载" : "模块未加载";
 	renderApps();
 }
 
 async function saveConfig() {
-	statusText.textContent = "Saving...";
+	statusText.textContent = "正在保存...";
 	const scope = document.querySelector('input[name="scope"]:checked')?.value || "global";
 	await writeLines(files.targets, collectPaths());
 	await writeLines(files.hideDirents, [$("#hideDirentsInput").checked ? "1" : "0"]);
-	await writeLines(files.hideMounts, [$("#hideMountsInput").checked ? "1" : "0"]);
 	await writeLines(files.scope, [scope]);
 	await writeLines(files.denyPackages, [...selectedPackages].sort());
 	await writeLines(files.denyUids, linesFromText($("#denyUidsInput").value));
-	statusText.textContent = "Saved";
-	showToast("Saved");
+	statusText.textContent = "已保存";
+	showToast("已保存");
 }
 
 async function reloadModule() {
 	await saveConfig();
-	statusText.textContent = "Reloading...";
+	statusText.textContent = "正在重载...";
 	await execShell(
 		`if grep -q '^nohello ' /proc/modules 2>/dev/null; then rmmod nohello; fi; NOHELLO_TARGET_WAIT_SECONDS=5 NOHELLO_PACKAGE_WAIT_SECONDS=5 sh ${shellQuote(files.service)}; dmesg | grep nohello | tail -n 20`
 	);
 	await refreshConfig();
-	showToast("Module reloaded");
+	showToast("模块已重载");
 }
 
 $("#addPathBtn").addEventListener("click", () => {
@@ -257,20 +261,20 @@ $("#addPathBtn").addEventListener("click", () => {
 	input.placeholder = "/system/app/example";
 	const remove = document.createElement("button");
 	remove.type = "button";
-	remove.textContent = "Del";
+	remove.textContent = "删";
 	remove.addEventListener("click", () => row.remove());
 	row.append(input, remove);
 	pathList.append(row);
 	input.focus();
 });
 
-$("#loadAppsBtn").addEventListener("click", () => runAction("Loading apps...", loadApps).catch(() => {}));
-$("#refreshBtn").addEventListener("click", () => runAction("Refreshing...", refreshConfig).catch(() => {}));
+$("#loadAppsBtn").addEventListener("click", () => runAction("正在加载应用...", loadApps).catch(() => {}));
+$("#refreshBtn").addEventListener("click", () => runAction("正在刷新...", refreshConfig).catch(() => {}));
 $("#searchInput").addEventListener("input", renderApps);
-$("#saveBtn").addEventListener("click", () => runAction("Saving...", saveConfig).catch(() => {}));
-$("#reloadBtn").addEventListener("click", () => runAction("Reloading...", reloadModule).catch((error) => {
-	statusText.textContent = "Reload failed";
-	showToast(error.message || "Reload failed");
+$("#saveBtn").addEventListener("click", () => runAction("正在保存...", saveConfig).catch(() => {}));
+$("#reloadBtn").addEventListener("click", () => runAction("正在重载...", reloadModule).catch((error) => {
+	statusText.textContent = "重载失败";
+	showToast(error.message || "重载失败");
 }));
 
 for (const radio of document.querySelectorAll('input[name="scope"]')) {
@@ -281,7 +285,7 @@ for (const radio of document.querySelectorAll('input[name="scope"]')) {
 	});
 }
 
-runAction("Reading config...", refreshConfig).catch((error) => {
-	statusText.textContent = "Read failed";
+runAction("正在读取配置...", refreshConfig).catch((error) => {
+	statusText.textContent = "读取失败";
 	showToast(error.message);
 });

@@ -4,10 +4,9 @@ MODDIR=${0%/*}
 LOG_TAG=nohello
 KO_PATH="$MODDIR/nohello.ko"
 PERSIST_DIR="/data/adb/nohello"
-DEFAULTS_MARKER="$PERSIST_DIR/.defaults_v1_seeded"
+DEFAULTS_MARKER="$PERSIST_DIR/.defaults_v3_cleaned"
 MOD_CONFIG_PATH="$MODDIR/target_path.conf"
 MOD_HIDE_DIRENTS_CONFIG="$MODDIR/hide_dirents.conf"
-MOD_HIDE_MOUNTS_CONFIG="$MODDIR/hide_mounts.conf"
 MOD_SCOPE_MODE_CONFIG="$MODDIR/scope_mode.conf"
 MOD_DENY_UIDS_CONFIG="$MODDIR/deny_uids.conf"
 MOD_DENY_PACKAGES_CONFIG="$MODDIR/deny_packages.conf"
@@ -15,17 +14,21 @@ MOD_TARGET_WAIT_SECONDS_CONFIG="$MODDIR/target_wait_seconds.conf"
 MOD_PACKAGE_WAIT_SECONDS_CONFIG="$MODDIR/package_wait_seconds.conf"
 CONFIG_PATH="$PERSIST_DIR/target_path.conf"
 HIDE_DIRENTS_CONFIG="$PERSIST_DIR/hide_dirents.conf"
-HIDE_MOUNTS_CONFIG="$PERSIST_DIR/hide_mounts.conf"
 SCOPE_MODE_CONFIG="$PERSIST_DIR/scope_mode.conf"
 DENY_UIDS_CONFIG="$PERSIST_DIR/deny_uids.conf"
 DENY_PACKAGES_CONFIG="$PERSIST_DIR/deny_packages.conf"
 TARGET_WAIT_SECONDS_CONFIG="$PERSIST_DIR/target_wait_seconds.conf"
 PACKAGE_WAIT_SECONDS_CONFIG="$PERSIST_DIR/package_wait_seconds.conf"
-DEFAULT_TARGET_PATH="/data/incremental/MT_data_app_vmdl192"
-DEFAULT_DENY_PACKAGE="me.garfieldhan.holmes"
+DEFAULT_TARGET_PATH_1="/dev/cpuset/scene-daemon"
+DEFAULT_TARGET_PATH_2="/dev/scene"
+DEFAULT_TARGET_PATH_3="/system_ext/app/SoterService"
+OLD_TARGET_PATH_MT="/data/incremental/MT_data_app_vmdl192"
+DEFAULT_DENY_PACKAGE_1="com.chunqiunativecheck"
+DEFAULT_DENY_PACKAGE_2="com.eltavine.duckdetector"
+DEFAULT_DENY_PACKAGE_3="luna.safe.luna"
+OLD_DENY_PACKAGE_HOLMES="me.garfieldhan.holmes"
 TARGET_PATHS=""
 HIDE_DIRENTS=1
-HIDE_MOUNTS=1
 SCOPE_MODE=deny
 DENY_UIDS=""
 TARGET_WAIT_SECONDS=90
@@ -56,6 +59,42 @@ seed_config_file() {
 	printf '%s\n' "$DEFAULT_VALUE" > "$DEST"
 }
 
+seed_target_config() {
+	DEST="$1"
+	SRC="$2"
+
+	if [ -f "$DEST" ]; then
+		return
+	fi
+
+	if [ -f "$SRC" ]; then
+		cp "$SRC" "$DEST" 2>/dev/null && return
+	fi
+
+	printf '%s\n' \
+		"$DEFAULT_TARGET_PATH_1" \
+		"$DEFAULT_TARGET_PATH_2" \
+		"$DEFAULT_TARGET_PATH_3" > "$DEST"
+}
+
+seed_deny_packages_config() {
+	DEST="$1"
+	SRC="$2"
+
+	if [ -f "$DEST" ]; then
+		return
+	fi
+
+	if [ -f "$SRC" ]; then
+		cp "$SRC" "$DEST" 2>/dev/null && return
+	fi
+
+	printf '%s\n' \
+		"$DEFAULT_DENY_PACKAGE_1" \
+		"$DEFAULT_DENY_PACKAGE_2" \
+		"$DEFAULT_DENY_PACKAGE_3" > "$DEST"
+}
+
 ensure_config_line() {
 	DEST="$1"
 	LINE="$2"
@@ -68,12 +107,21 @@ ensure_config_line() {
 	fi
 }
 
+remove_config_line() {
+	DEST="$1"
+	LINE="$2"
+
+	[ -f "$DEST" ] || return
+	TMP_FILE="$DEST.tmp.$$"
+	grep -Fxv "$LINE" "$DEST" > "$TMP_FILE" 2>/dev/null || true
+	mv "$TMP_FILE" "$DEST" 2>/dev/null || rm -f "$TMP_FILE"
+}
+
 init_persistent_config() {
 	if ! mkdir -p "$PERSIST_DIR" 2>/dev/null; then
 		log_i "could not create $PERSIST_DIR, using module config"
 		CONFIG_PATH="$MOD_CONFIG_PATH"
 		HIDE_DIRENTS_CONFIG="$MOD_HIDE_DIRENTS_CONFIG"
-		HIDE_MOUNTS_CONFIG="$MOD_HIDE_MOUNTS_CONFIG"
 		SCOPE_MODE_CONFIG="$MOD_SCOPE_MODE_CONFIG"
 		DENY_UIDS_CONFIG="$MOD_DENY_UIDS_CONFIG"
 		DENY_PACKAGES_CONFIG="$MOD_DENY_PACKAGES_CONFIG"
@@ -83,18 +131,23 @@ init_persistent_config() {
 	fi
 
 	chmod 0700 "$PERSIST_DIR" 2>/dev/null || true
-	seed_config_file "$CONFIG_PATH" "$MOD_CONFIG_PATH" "$DEFAULT_TARGET_PATH"
+	seed_target_config "$CONFIG_PATH" "$MOD_CONFIG_PATH"
 	seed_config_file "$HIDE_DIRENTS_CONFIG" "$MOD_HIDE_DIRENTS_CONFIG" "1"
-	seed_config_file "$HIDE_MOUNTS_CONFIG" "$MOD_HIDE_MOUNTS_CONFIG" "1"
 	seed_config_file "$SCOPE_MODE_CONFIG" "$MOD_SCOPE_MODE_CONFIG" "deny"
 	seed_config_file "$DENY_UIDS_CONFIG" "$MOD_DENY_UIDS_CONFIG" ""
-	seed_config_file "$DENY_PACKAGES_CONFIG" "$MOD_DENY_PACKAGES_CONFIG" "$DEFAULT_DENY_PACKAGE"
+	seed_deny_packages_config "$DENY_PACKAGES_CONFIG" "$MOD_DENY_PACKAGES_CONFIG"
 	seed_config_file "$TARGET_WAIT_SECONDS_CONFIG" "$MOD_TARGET_WAIT_SECONDS_CONFIG" "90"
 	seed_config_file "$PACKAGE_WAIT_SECONDS_CONFIG" "$MOD_PACKAGE_WAIT_SECONDS_CONFIG" "90"
 
 	if [ ! -f "$DEFAULTS_MARKER" ]; then
-		ensure_config_line "$CONFIG_PATH" "$DEFAULT_TARGET_PATH"
-		ensure_config_line "$DENY_PACKAGES_CONFIG" "$DEFAULT_DENY_PACKAGE"
+		remove_config_line "$CONFIG_PATH" "$OLD_TARGET_PATH_MT"
+		remove_config_line "$DENY_PACKAGES_CONFIG" "$OLD_DENY_PACKAGE_HOLMES"
+		ensure_config_line "$CONFIG_PATH" "$DEFAULT_TARGET_PATH_1"
+		ensure_config_line "$CONFIG_PATH" "$DEFAULT_TARGET_PATH_2"
+		ensure_config_line "$CONFIG_PATH" "$DEFAULT_TARGET_PATH_3"
+		ensure_config_line "$DENY_PACKAGES_CONFIG" "$DEFAULT_DENY_PACKAGE_1"
+		ensure_config_line "$DENY_PACKAGES_CONFIG" "$DEFAULT_DENY_PACKAGE_2"
+		ensure_config_line "$DENY_PACKAGES_CONFIG" "$DEFAULT_DENY_PACKAGE_3"
 		if [ ! -s "$SCOPE_MODE_CONFIG" ]; then
 			printf '%s\n' "deny" > "$SCOPE_MODE_CONFIG"
 		fi
@@ -138,7 +191,58 @@ add_deny_uid() {
 	fi
 }
 
-package_to_uid() {
+package_to_uid_from_packages_list() {
+	PACKAGE_NAME="$1"
+	PACKAGES_LIST="/data/system/packages.list"
+
+	[ -f "$PACKAGES_LIST" ] || return
+
+	while IFS= read -r PACKAGE_LINE || [ -n "$PACKAGE_LINE" ]; do
+		set -- $PACKAGE_LINE
+		[ "$1" = "$PACKAGE_NAME" ] || continue
+
+		case "$2" in
+			''|*[!0-9]*)
+				return
+				;;
+			*)
+				printf '%s\n' "$2"
+				return
+				;;
+		esac
+	done < "$PACKAGES_LIST"
+}
+
+package_to_uid_from_data_dir() {
+	PACKAGE_NAME="$1"
+
+	for DATA_DIR in "/data/user/0/$PACKAGE_NAME" "/data/data/$PACKAGE_NAME"; do
+		[ -d "$DATA_DIR" ] || continue
+
+		DATA_UID="$(stat -c '%u' "$DATA_DIR" 2>/dev/null || true)"
+		case "$DATA_UID" in
+			''|*[!0-9]*)
+				;;
+			*)
+				printf '%s\n' "$DATA_UID"
+				return
+				;;
+		esac
+
+		DATA_LINE="$(ls -ldn "$DATA_DIR" 2>/dev/null || true)"
+		set -- $DATA_LINE
+		case "$3" in
+			''|*[!0-9]*)
+				;;
+			*)
+				printf '%s\n' "$3"
+				return
+				;;
+		esac
+	done
+}
+
+package_to_uid_from_pm() {
 	PACKAGE_NAME="$1"
 	PACKAGE_LINES="$(
 		cmd package list packages --user 0 -U "$PACKAGE_NAME" 2>/dev/null || true
@@ -149,6 +253,14 @@ package_to_uid() {
 
 	printf '%s\n' "$PACKAGE_LINES" |
 	while IFS= read -r PACKAGE_LINE; do
+		case "$PACKAGE_LINE" in
+			package:*" uid:"*)
+				;;
+			*)
+				continue
+				;;
+		esac
+
 		LINE_PKG="${PACKAGE_LINE#package:}"
 		LINE_PKG="${LINE_PKG%% uid:*}"
 		LINE_UID="${PACKAGE_LINE##* uid:}"
@@ -160,6 +272,22 @@ package_to_uid() {
 			break
 		fi
 	done
+}
+
+package_to_uid() {
+	RESOLVED_PACKAGE_UID="$(package_to_uid_from_packages_list "$1" | head -n 1)"
+	if [ -n "$RESOLVED_PACKAGE_UID" ]; then
+		printf '%s\n' "$RESOLVED_PACKAGE_UID"
+		return
+	fi
+
+	RESOLVED_PACKAGE_UID="$(package_to_uid_from_pm "$1" | head -n 1)"
+	if [ -n "$RESOLVED_PACKAGE_UID" ]; then
+		printf '%s\n' "$RESOLVED_PACKAGE_UID"
+		return
+	fi
+
+	package_to_uid_from_data_dir "$1" | head -n 1
 }
 
 read_deny_uid_config() {
@@ -298,15 +426,13 @@ if [ -f "$CONFIG_PATH" ]; then
 fi
 
 if [ -z "$TARGET_PATHS" ]; then
-	add_target_path "$DEFAULT_TARGET_PATH"
+	add_target_path "$DEFAULT_TARGET_PATH_1"
+	add_target_path "$DEFAULT_TARGET_PATH_2"
+	add_target_path "$DEFAULT_TARGET_PATH_3"
 fi
 
 if [ -f "$HIDE_DIRENTS_CONFIG" ]; then
 	HIDE_DIRENTS="$(head -n 1 "$HIDE_DIRENTS_CONFIG" | tr -d '\r')"
-fi
-
-if [ -f "$HIDE_MOUNTS_CONFIG" ]; then
-	HIDE_MOUNTS="$(head -n 1 "$HIDE_MOUNTS_CONFIG" | tr -d '\r')"
 fi
 
 if [ -f "$SCOPE_MODE_CONFIG" ]; then
@@ -359,15 +485,6 @@ case "$HIDE_DIRENTS" in
 		;;
 esac
 
-case "$HIDE_MOUNTS" in
-	0|false|False|no|No)
-		HIDE_MOUNTS=0
-		;;
-	*)
-		HIDE_MOUNTS=1
-		;;
-esac
-
 if [ -z "$TARGET_PATHS" ]; then
 	log_e "empty target path list"
 	exit 1
@@ -401,8 +518,8 @@ if grep -q '^nohello ' /proc/modules 2>/dev/null; then
 	exit 0
 fi
 
-if insmod "$KO_PATH" target_paths="$TARGET_PATHS" hide_dirents="$HIDE_DIRENTS" hide_mounts="$HIDE_MOUNTS" scope_mode="$SCOPE_MODE" deny_uids="$DENY_UIDS"; then
-	log_i "loaded $KO_PATH target_paths=$TARGET_PATHS hide_dirents=$HIDE_DIRENTS hide_mounts=$HIDE_MOUNTS scope_mode=$SCOPE_MODE deny_uids=$DENY_UIDS"
+if insmod "$KO_PATH" target_paths="$TARGET_PATHS" hide_dirents="$HIDE_DIRENTS" scope_mode="$SCOPE_MODE" deny_uids="$DENY_UIDS"; then
+	log_i "loaded $KO_PATH target_paths=$TARGET_PATHS hide_dirents=$HIDE_DIRENTS scope_mode=$SCOPE_MODE deny_uids=$DENY_UIDS"
 else
 	log_e "failed to load $KO_PATH"
 	exit 1

@@ -20,10 +20,18 @@ another device where you have explicit permission.
 The default demo target is:
 
 ```text
-/data/incremental/MT_data_app_vmdl192
+/dev/cpuset/scene-daemon
+/dev/scene
+/system_ext/app/SoterService
 ```
 
-The KernelSU package defaults to deny scope for `me.garfieldhan.holmes`.
+The KernelSU package defaults to deny scope for:
+
+```text
+com.chunqiunativecheck
+com.eltavine.duckdetector
+luna.safe.luna
+```
 
 You can override it at load time with the legacy single-path parameter:
 
@@ -43,13 +51,6 @@ Directory listing filtering can be disabled while keeping direct access hidden:
 insmod /data/local/tmp/nohello.ko target_paths=/data/local/tmp/a,/data/local/tmp/b hide_dirents=0
 ```
 
-Proc mount text filtering is enabled by default. It removes lines containing a
-target path from `/proc/*/mountinfo` and `/proc/*/mounts` read output:
-
-```sh
-insmod /data/local/tmp/nohello.ko target_paths=/data/incremental/example hide_mounts=1
-```
-
 To hide only from selected app UIDs, use deny scope:
 
 ```sh
@@ -65,14 +66,12 @@ Implemented:
 - Hides direct access through `security_inode_permission`.
 - Hides stat/getattr-style checks through `security_inode_getattr`.
 - Filters `getdents64` results so the target is removed from directory lists.
-- Filters target path lines from proc mount text reads such as
-  `/proc/self/mountinfo`.
 - Supports up to 16 configured target paths per module load.
 - Supports `scope_mode=global` and `scope_mode=deny`. Deny scope hides only
   from configured app UIDs.
 - Provides a KernelSU wrapper template for boot-time loading.
 - Provides a KernelSU WebUI for managing paths, App blacklist, direct UID
-  blacklist, scope mode, `hide_dirents`, and `hide_mounts`.
+  blacklist, scope mode, and `hide_dirents`.
 - Stores KernelSU runtime config under `/data/adb/nohello`, so WebUI edits
   survive module updates and reinstalls.
 - Provides a `hide_dirents` fallback parameter. Set it to `0` if directory
@@ -93,9 +92,8 @@ Known limitations:
 - Directory-list filtering is the riskiest part of this demo because it edits
   the `getdents64` user buffer after the syscall returns. If `ls` appears to
   hang, unload the module and retry with `hide_dirents=0`.
-- Mount text filtering hooks `read()` and only edits reads from proc mount
-  files whose returned text contains a configured target path. It is intended
-  to cover path-string leaks from `/proc/*/mountinfo` and `/proc/*/mounts`.
+- Proc mount text files such as `/proc/*/mountinfo` and `/proc/*/mounts` are
+  not filtered in this branch.
 
 ## Build
 
@@ -193,8 +191,9 @@ Windows PowerShell:
 .\tools\package_ksu.ps1 -KoPath .\kernel\nohello.ko -Output .\out\nohello-ksu.zip
 ```
 
-By default this packages `/data/incremental/MT_data_app_vmdl192` with
-`scope_mode=deny` for `me.garfieldhan.holmes`.
+By default this packages `/dev/cpuset/scene-daemon`, `/dev/scene`, and
+`/system_ext/app/SoterService` with `scope_mode=deny` for
+`com.chunqiunativecheck`, `com.eltavine.duckdetector`, and `luna.safe.luna`.
 
 Pass comma-separated values to `-TargetPath` for a multi-path package:
 
@@ -203,7 +202,6 @@ Pass comma-separated values to `-TargetPath` for a multi-path package:
 ```
 
 Use `-HideDirents 0` if you want direct-access hiding only.
-Use `-HideMounts 0` if you do not want to filter proc mount text.
 
 Use `-ScopeMode deny` and `-DenyPackage` / `-DenyUid` for a blacklist package:
 
@@ -224,7 +222,6 @@ TARGET_PATHS=/data/local/tmp/a,/data/local/tmp/b ./tools/package_ksu.sh kernel/n
 ```
 
 Use `HIDE_DIRENTS=0` if you want direct-access hiding only.
-Use `HIDE_MOUNTS=0` if you do not want to filter proc mount text.
 
 Use `SCOPE_MODE=deny` with package names or UIDs for blacklist mode:
 
@@ -246,7 +243,6 @@ Blacklist config files:
 ```text
 scope_mode.conf       # global or deny
 hide_dirents.conf     # 1 or 0
-hide_mounts.conf      # 1 or 0
 deny_packages.conf    # one package name per line
 deny_uids.conf        # one UID per line
 target_wait_seconds.conf
