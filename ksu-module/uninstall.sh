@@ -1,6 +1,5 @@
 #!/system/bin/sh
 
-if grep -q '^nohello ' /proc/modules 2>/dev/null; then
-	rmmod nohello 2>/dev/null
+if grep -q '^noopt ' /proc/modules 2>/dev/null; then
+	rmmod noopt 2>/dev/null
 fi
-

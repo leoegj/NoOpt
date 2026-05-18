@@ -1,9 +1,8 @@
-const MODDIR = "/data/adb/modules/nohello-demo";
-const CONFIGDIR = "/data/adb/nohello";
+const MODDIR = "/data/adb/modules/noopt-demo";
+const CONFIGDIR = "/data/adb/noopt";
 const DEFAULT_TARGET_PATHS = [
-	"/dev/cpuset/scene-daemon",
-	"/dev/scene",
-	"/system_ext/app/SoterService",
+	"/dev/cpuset/AppOpt",
+	"/data/system/junge",
 ];
 const DEFAULT_DENY_PACKAGES = [
 	"com.chunqiunativecheck",
@@ -59,7 +58,7 @@ function execShell(command) {
 	}
 
 	return new Promise((resolve, reject) => {
-		const callbackName = `nohello_exec_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+		const callbackName = `noopt_exec_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 
 		window[callbackName] = (errno, stdout, stderr) => {
 			delete window[callbackName];
@@ -218,7 +217,7 @@ async function refreshConfig() {
 	const scopeText = await readFile(files.scope);
 	const pkgText = await readFile(files.denyPackages);
 	const uidText = await readFile(files.denyUids);
-	const procText = await execShell("grep '^nohello ' /proc/modules || true");
+	const procText = await execShell("grep '^noopt ' /proc/modules || true");
 
 	renderPaths(linesFromText(targetText));
 	$("#hideDirentsInput").checked = (hideText.trim() || "1") !== "0";
@@ -247,7 +246,7 @@ async function reloadModule() {
 	await saveConfig();
 	statusText.textContent = "正在重载...";
 	await execShell(
-		`if grep -q '^nohello ' /proc/modules 2>/dev/null; then rmmod nohello; fi; NOHELLO_TARGET_WAIT_SECONDS=5 NOHELLO_PACKAGE_WAIT_SECONDS=5 sh ${shellQuote(files.service)}; dmesg | grep nohello | tail -n 20`
+		`if grep -q '^noopt ' /proc/modules 2>/dev/null; then rmmod noopt; fi; NOOPT_TARGET_WAIT_SECONDS=5 NOOPT_PACKAGE_WAIT_SECONDS=5 sh ${shellQuote(files.service)}; dmesg | grep noopt | tail -n 20`
 	);
 	await refreshConfig();
 	showToast("模块已重载");

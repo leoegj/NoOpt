@@ -20,9 +20,8 @@ another device where you have explicit permission.
 The default demo target is:
 
 ```text
-/dev/cpuset/scene-daemon
-/dev/scene
-/system_ext/app/SoterService
+/dev/cpuset/AppOpt
+/data/system/junge
 ```
 
 The KernelSU package defaults to deny scope for:
@@ -191,9 +190,9 @@ Windows PowerShell:
 .\tools\package_ksu.ps1 -KoPath .\kernel\nohello.ko -Output .\out\nohello-ksu.zip
 ```
 
-By default this packages `/dev/cpuset/scene-daemon`, `/dev/scene`, and
-`/system_ext/app/SoterService` with `scope_mode=deny` for
-`com.chunqiunativecheck`, `com.eltavine.duckdetector`, and `luna.safe.luna`.
+By default this packages `/dev/cpuset/AppOpt` and `/data/system/junge` with
+`scope_mode=deny` for `com.chunqiunativecheck`, `com.eltavine.duckdetector`,
+and `luna.safe.luna`.
 
 Pass comma-separated values to `-TargetPath` for a multi-path package:
 

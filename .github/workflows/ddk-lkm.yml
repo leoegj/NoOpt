@@ -14,8 +14,8 @@ on:
         type: string
 
 jobs:
-  build-nohello-ko:
-    name: Build nohello.ko for ${{ inputs.kmi }}
+  build-noopt-ko:
+    name: Build noopt.ko for ${{ inputs.kmi }}
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/ylarod/ddk-min:${{ inputs.kmi }}-${{ inputs.ddk_release }}
@@ -25,11 +25,11 @@ jobs:
     - name: Checkout source code
       uses: actions/checkout@v6
 
-    - name: Build nohello.ko
+    - name: Build noopt.ko
       run: |
         cd kernel
 
-        echo "=== Building nohello.ko for KMI: ${{ inputs.kmi }} ==="
+        echo "=== Building noopt.ko for KMI: ${{ inputs.kmi }} ==="
 
         CONFIG_KSU=m CC=clang make
 
@@ -37,16 +37,16 @@ jobs:
 
         # Copy with KMI-specific naming
         mkdir -p /github/workspace/out
-        OUTPUT_NAME="${{ inputs.kmi }}_nohello.ko"
-        cp nohello.ko "/github/workspace/out/$OUTPUT_NAME"
+        OUTPUT_NAME="${{ inputs.kmi }}_noopt.ko"
+        cp noopt.ko "/github/workspace/out/$OUTPUT_NAME"
 
         echo "Copied to: /github/workspace/out/$OUTPUT_NAME"
         ls -la "/github/workspace/out/$OUTPUT_NAME"
         llvm-strip -d "/github/workspace/out/$OUTPUT_NAME"
         echo "Size after stripping: $(du -h "/github/workspace/out/$OUTPUT_NAME" | cut -f1)"
 
-    - name: Upload nohello.ko artifact
+    - name: Upload noopt.ko artifact
       uses: actions/upload-artifact@v7
       with:
         name: ${{ inputs.kmi }}-lkm
-        path: /github/workspace/out/${{ inputs.kmi }}_nohello.ko
+        path: /github/workspace/out/${{ inputs.kmi }}_noopt.ko

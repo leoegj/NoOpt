@@ -1,10 +1,10 @@
 #!/system/bin/sh
 
 MODDIR=${0%/*}
-LOG_TAG=nohello
-KO_PATH="$MODDIR/nohello.ko"
-PERSIST_DIR="/data/adb/nohello"
-DEFAULTS_MARKER="$PERSIST_DIR/.defaults_v3_cleaned"
+LOG_TAG=noopt
+KO_PATH="$MODDIR/noopt.ko"
+PERSIST_DIR="/data/adb/noopt"
+DEFAULTS_MARKER="$PERSIST_DIR/.config_version"
 MOD_CONFIG_PATH="$MODDIR/target_path.conf"
 MOD_HIDE_DIRENTS_CONFIG="$MODDIR/hide_dirents.conf"
 MOD_SCOPE_MODE_CONFIG="$MODDIR/scope_mode.conf"
@@ -19,14 +19,12 @@ DENY_UIDS_CONFIG="$PERSIST_DIR/deny_uids.conf"
 DENY_PACKAGES_CONFIG="$PERSIST_DIR/deny_packages.conf"
 TARGET_WAIT_SECONDS_CONFIG="$PERSIST_DIR/target_wait_seconds.conf"
 PACKAGE_WAIT_SECONDS_CONFIG="$PERSIST_DIR/package_wait_seconds.conf"
-DEFAULT_TARGET_PATH_1="/dev/cpuset/scene-daemon"
-DEFAULT_TARGET_PATH_2="/dev/scene"
-DEFAULT_TARGET_PATH_3="/system_ext/app/SoterService"
-OLD_TARGET_PATH_MT="/data/incremental/MT_data_app_vmdl192"
+DEFAULT_TARGET_PATH_1="/dev/cpuset/AppOpt"
+DEFAULT_TARGET_PATH_2="/data/system/junge"
 DEFAULT_DENY_PACKAGE_1="com.chunqiunativecheck"
 DEFAULT_DENY_PACKAGE_2="com.eltavine.duckdetector"
 DEFAULT_DENY_PACKAGE_3="luna.safe.luna"
-OLD_DENY_PACKAGE_HOLMES="me.garfieldhan.holmes"
+
 TARGET_PATHS=""
 HIDE_DIRENTS=1
 SCOPE_MODE=deny
@@ -73,8 +71,7 @@ seed_target_config() {
 
 	printf '%s\n' \
 		"$DEFAULT_TARGET_PATH_1" \
-		"$DEFAULT_TARGET_PATH_2" \
-		"$DEFAULT_TARGET_PATH_3" > "$DEST"
+		"$DEFAULT_TARGET_PATH_2" > "$DEST"
 }
 
 seed_deny_packages_config() {
@@ -107,16 +104,6 @@ ensure_config_line() {
 	fi
 }
 
-remove_config_line() {
-	DEST="$1"
-	LINE="$2"
-
-	[ -f "$DEST" ] || return
-	TMP_FILE="$DEST.tmp.$$"
-	grep -Fxv "$LINE" "$DEST" > "$TMP_FILE" 2>/dev/null || true
-	mv "$TMP_FILE" "$DEST" 2>/dev/null || rm -f "$TMP_FILE"
-}
-
 init_persistent_config() {
 	if ! mkdir -p "$PERSIST_DIR" 2>/dev/null; then
 		log_i "could not create $PERSIST_DIR, using module config"
@@ -131,27 +118,42 @@ init_persistent_config() {
 	fi
 
 	chmod 0700 "$PERSIST_DIR" 2>/dev/null || true
-	seed_target_config "$CONFIG_PATH" "$MOD_CONFIG_PATH"
-	seed_config_file "$HIDE_DIRENTS_CONFIG" "$MOD_HIDE_DIRENTS_CONFIG" "1"
-	seed_config_file "$SCOPE_MODE_CONFIG" "$MOD_SCOPE_MODE_CONFIG" "deny"
-	seed_config_file "$DENY_UIDS_CONFIG" "$MOD_DENY_UIDS_CONFIG" ""
-	seed_deny_packages_config "$DENY_PACKAGES_CONFIG" "$MOD_DENY_PACKAGES_CONFIG"
-	seed_config_file "$TARGET_WAIT_SECONDS_CONFIG" "$MOD_TARGET_WAIT_SECONDS_CONFIG" "90"
-	seed_config_file "$PACKAGE_WAIT_SECONDS_CONFIG" "$MOD_PACKAGE_WAIT_SECONDS_CONFIG" "90"
 
-	if [ ! -f "$DEFAULTS_MARKER" ]; then
-		remove_config_line "$CONFIG_PATH" "$OLD_TARGET_PATH_MT"
-		remove_config_line "$DENY_PACKAGES_CONFIG" "$OLD_DENY_PACKAGE_HOLMES"
-		ensure_config_line "$CONFIG_PATH" "$DEFAULT_TARGET_PATH_1"
-		ensure_config_line "$CONFIG_PATH" "$DEFAULT_TARGET_PATH_2"
-		ensure_config_line "$CONFIG_PATH" "$DEFAULT_TARGET_PATH_3"
-		ensure_config_line "$DENY_PACKAGES_CONFIG" "$DEFAULT_DENY_PACKAGE_1"
-		ensure_config_line "$DENY_PACKAGES_CONFIG" "$DEFAULT_DENY_PACKAGE_2"
-		ensure_config_line "$DENY_PACKAGES_CONFIG" "$DEFAULT_DENY_PACKAGE_3"
-		if [ ! -s "$SCOPE_MODE_CONFIG" ]; then
-			printf '%s\n' "deny" > "$SCOPE_MODE_CONFIG"
-		fi
-		touch "$DEFAULTS_MARKER" 2>/dev/null || true
+	# Read current module versionCode from module.prop
+	CURRENT_VERSION=""
+	if [ -f "$MODDIR/module.prop" ]; then
+		CURRENT_VERSION="$(grep '^versionCode=' "$MODDIR/module.prop" | cut -d= -f2 | tr -d '\r ')"
+	fi
+	CURRENT_VERSION="${CURRENT_VERSION:-0}"
+
+	# Read previously applied config version
+	SAVED_VERSION=""
+	if [ -f "$DEFAULTS_MARKER" ]; then
+		SAVED_VERSION="$(head -n 1 "$DEFAULTS_MARKER" | tr -d '\r ')"
+	fi
+	SAVED_VERSION="${SAVED_VERSION:-0}"
+
+	if [ "$CURRENT_VERSION" -gt "$SAVED_VERSION" ] 2>/dev/null || [ "$SAVED_VERSION" = "0" ]; then
+		# Fresh install or module updated: overwrite persistent config with
+		# module template so old defaults are automatically cleaned out.
+		log_i "config upgrade: $SAVED_VERSION -> $CURRENT_VERSION"
+		cp "$MOD_CONFIG_PATH" "$CONFIG_PATH" 2>/dev/null || true
+		cp "$MOD_HIDE_DIRENTS_CONFIG" "$HIDE_DIRENTS_CONFIG" 2>/dev/null || true
+		cp "$MOD_SCOPE_MODE_CONFIG" "$SCOPE_MODE_CONFIG" 2>/dev/null || true
+		cp "$MOD_DENY_PACKAGES_CONFIG" "$DENY_PACKAGES_CONFIG" 2>/dev/null || true
+		cp "$MOD_DENY_UIDS_CONFIG" "$DENY_UIDS_CONFIG" 2>/dev/null || true
+		cp "$MOD_TARGET_WAIT_SECONDS_CONFIG" "$TARGET_WAIT_SECONDS_CONFIG" 2>/dev/null || true
+		cp "$MOD_PACKAGE_WAIT_SECONDS_CONFIG" "$PACKAGE_WAIT_SECONDS_CONFIG" 2>/dev/null || true
+		printf '%s\n' "$CURRENT_VERSION" > "$DEFAULTS_MARKER"
+	else
+		# Same version: seed only missing files, preserve user edits.
+		seed_target_config "$CONFIG_PATH" "$MOD_CONFIG_PATH"
+		seed_config_file "$HIDE_DIRENTS_CONFIG" "$MOD_HIDE_DIRENTS_CONFIG" "1"
+		seed_config_file "$SCOPE_MODE_CONFIG" "$MOD_SCOPE_MODE_CONFIG" "deny"
+		seed_config_file "$DENY_UIDS_CONFIG" "$MOD_DENY_UIDS_CONFIG" ""
+		seed_deny_packages_config "$DENY_PACKAGES_CONFIG" "$MOD_DENY_PACKAGES_CONFIG"
+		seed_config_file "$TARGET_WAIT_SECONDS_CONFIG" "$MOD_TARGET_WAIT_SECONDS_CONFIG" "90"
+		seed_config_file "$PACKAGE_WAIT_SECONDS_CONFIG" "$MOD_PACKAGE_WAIT_SECONDS_CONFIG" "90"
 	fi
 }
 
@@ -428,7 +430,6 @@ fi
 if [ -z "$TARGET_PATHS" ]; then
 	add_target_path "$DEFAULT_TARGET_PATH_1"
 	add_target_path "$DEFAULT_TARGET_PATH_2"
-	add_target_path "$DEFAULT_TARGET_PATH_3"
 fi
 
 if [ -f "$HIDE_DIRENTS_CONFIG" ]; then
@@ -447,12 +448,12 @@ if [ -f "$PACKAGE_WAIT_SECONDS_CONFIG" ]; then
 	PACKAGE_WAIT_SECONDS="$(head -n 1 "$PACKAGE_WAIT_SECONDS_CONFIG" | tr -d '\r ')"
 fi
 
-if [ -n "$NOHELLO_TARGET_WAIT_SECONDS" ]; then
-	TARGET_WAIT_SECONDS="$NOHELLO_TARGET_WAIT_SECONDS"
+if [ -n "$NOOPT_TARGET_WAIT_SECONDS" ]; then
+	TARGET_WAIT_SECONDS="$NOOPT_TARGET_WAIT_SECONDS"
 fi
 
-if [ -n "$NOHELLO_PACKAGE_WAIT_SECONDS" ]; then
-	PACKAGE_WAIT_SECONDS="$NOHELLO_PACKAGE_WAIT_SECONDS"
+if [ -n "$NOOPT_PACKAGE_WAIT_SECONDS" ]; then
+	PACKAGE_WAIT_SECONDS="$NOOPT_PACKAGE_WAIT_SECONDS"
 fi
 
 case "$TARGET_WAIT_SECONDS" in
@@ -513,8 +514,8 @@ else
 	read_deny_package_config 0
 fi
 
-if grep -q '^nohello ' /proc/modules 2>/dev/null; then
-	log_i "nohello is already loaded"
+if grep -q '^noopt ' /proc/modules 2>/dev/null; then
+	log_i "noopt is already loaded"
 	exit 0
 fi
 

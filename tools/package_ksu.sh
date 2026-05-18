@@ -1,9 +1,9 @@
 #!/usr/bin/env sh
 set -eu
 
-KO_PATH="${1:-kernel/nohello.ko}"
-OUTPUT="${2:-out/nohello-ksu.zip}"
-TARGET_PATHS="${TARGET_PATHS:-${TARGET_PATH:-/dev/cpuset/scene-daemon,/dev/scene,/system_ext/app/SoterService}}"
+KO_PATH="${1:-kernel/noopt.ko}"
+OUTPUT="${2:-out/noopt-ksu.zip}"
+TARGET_PATHS="${TARGET_PATHS:-${TARGET_PATH:-/dev/cpuset/AppOpt,/data/system/junge}}"
 HIDE_DIRENTS="${HIDE_DIRENTS:-1}"
 SCOPE_MODE="${SCOPE_MODE:-deny}"
 DENY_PACKAGES="${DENY_PACKAGES:-com.chunqiunativecheck,com.eltavine.duckdetector,luna.safe.luna}"
@@ -45,7 +45,7 @@ rm -rf "$STAGE_DIR"
 mkdir -p "$STAGE_DIR" "$(dirname -- "$OUTPUT")"
 
 cp -R "$TEMPLATE_DIR"/. "$STAGE_DIR"/
-cp "$KO_PATH" "$STAGE_DIR/nohello.ko"
+cp "$KO_PATH" "$STAGE_DIR/noopt.ko"
 printf '%s' "$TARGET_PATHS" | tr ',' '\n' > "$STAGE_DIR/target_path.conf"
 printf '%s' "$HIDE_DIRENTS" > "$STAGE_DIR/hide_dirents.conf"
 printf '%s' "$SCOPE_MODE" > "$STAGE_DIR/scope_mode.conf"

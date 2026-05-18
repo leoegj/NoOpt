@@ -1,7 +1,7 @@
 param(
-    [string]$KoPath = "kernel\nohello.ko",
-    [string]$Output = "out\nohello-ksu.zip",
-    [string]$TargetPath = "/dev/cpuset/scene-daemon,/dev/scene,/system_ext/app/SoterService",
+    [string]$KoPath = "kernel\noopt.ko",
+    [string]$Output = "out\noopt-ksu.zip",
+    [string]$TargetPath = "/dev/cpuset/AppOpt,/data/system/junge",
     [ValidateSet("0", "1")]
     [string]$HideDirents = "1",
     [ValidateSet("global", "deny")]
@@ -50,7 +50,7 @@ New-Item -ItemType Directory -Force -Path $StageDir | Out-Null
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Output) | Out-Null
 
 Copy-Item -Path (Join-Path $TemplateDir "*") -Destination $StageDir -Recurse -Force
-Copy-Item -LiteralPath $KoPath -Destination (Join-Path $StageDir "nohello.ko") -Force
+Copy-Item -LiteralPath $KoPath -Destination (Join-Path $StageDir "noopt.ko") -Force
 Set-Content -LiteralPath (Join-Path $StageDir "target_path.conf") -Value $TargetList -Encoding ASCII
 Set-Content -LiteralPath (Join-Path $StageDir "hide_dirents.conf") -Value $HideDirents -NoNewline -Encoding ASCII
 Set-Content -LiteralPath (Join-Path $StageDir "scope_mode.conf") -Value $ScopeMode -NoNewline -Encoding ASCII

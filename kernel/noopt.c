@@ -1,6 +1,6 @@
-// SPDX-License-Identifier: GPL-2.0
+﻿// SPDX-License-Identifier: GPL-2.0
 /*
- * nohello - hide a given file from all system calls (arm64 Android / GKI)
+ * noopt - hide a given file from all system calls (arm64 Android / GKI)
  *
  * Uses kretprobes to intercept VFS operations and make the target file
  * appear as non-existent.  Identification is via the (inode, dev) pair.
@@ -34,33 +34,33 @@
 #define ANDROID_ISOLATED_START 99000u
 #define ANDROID_ISOLATED_END 99999u
 
-enum nohello_scope_mode {
+enum noopt_scope_mode {
 	SCOPE_GLOBAL = 0,
 	SCOPE_DENY,
 };
 
-static char *target_path = "/data/local/tmp/nohello";
-module_param(target_path, charp, 0644);
+static char *target_path = "/data/local/tmp/noopt";
+module_param(target_path, charp, 0000);
 MODULE_PARM_DESC(target_path, "Legacy single absolute path to hide");
 
 static char target_paths[TARGET_PATHS_LEN];
-module_param_string(target_paths, target_paths, sizeof(target_paths), 0644);
+module_param_string(target_paths, target_paths, sizeof(target_paths), 0000);
 MODULE_PARM_DESC(target_paths, "Comma-separated absolute paths to hide");
 
 static bool hide_dirents = true;
-module_param(hide_dirents, bool, 0644);
+module_param(hide_dirents, bool, 0000);
 MODULE_PARM_DESC(hide_dirents, "Hide target from getdents64 directory listings");
 
 static bool hide_isolated = true;
-module_param(hide_isolated, bool, 0644);
+module_param(hide_isolated, bool, 0000);
 MODULE_PARM_DESC(hide_isolated, "Also hide from Android isolated-process UIDs in deny scope");
 
 static char scope_mode[16] = "global";
-module_param_string(scope_mode, scope_mode, sizeof(scope_mode), 0644);
+module_param_string(scope_mode, scope_mode, sizeof(scope_mode), 0000);
 MODULE_PARM_DESC(scope_mode, "Hide scope: global or deny");
 
 static char deny_uids[UID_LIST_LEN];
-module_param_string(deny_uids, deny_uids, sizeof(deny_uids), 0644);
+module_param_string(deny_uids, deny_uids, sizeof(deny_uids), 0000);
 MODULE_PARM_DESC(deny_uids, "Comma-separated UIDs hidden from targets");
 
 /* system-unique target identifiers */
@@ -72,7 +72,7 @@ struct hidden_target {
 
 static struct hidden_target targets[MAX_HIDE_TARGETS];
 static unsigned int target_count;
-static enum nohello_scope_mode active_scope = SCOPE_GLOBAL;
+static enum noopt_scope_mode active_scope = SCOPE_GLOBAL;
 static uid_t deny_uid_list[MAX_DENY_UIDS];
 static unsigned int deny_uid_count;
 
@@ -158,14 +158,14 @@ static int parse_scope_mode(void)
 		return 0;
 	}
 
-	pr_err("nohello: unsupported scope_mode=%s\n", scope_mode);
+	pr_err("noopt: unsupported scope_mode=%s\n", scope_mode);
 	return -EINVAL;
 }
 
 static int add_deny_uid(uid_t uid)
 {
 	if (deny_uid_count >= MAX_DENY_UIDS) {
-		pr_warn("nohello: too many deny UIDs, skip %u\n", uid);
+		pr_warn("noopt: too many deny UIDs, skip %u\n", uid);
 		return -ENOSPC;
 	}
 
@@ -173,7 +173,7 @@ static int add_deny_uid(uid_t uid)
 		return 0;
 
 	deny_uid_list[deny_uid_count++] = uid;
-	pr_info("nohello: deny_uid[%u]=%u\n", deny_uid_count - 1, uid);
+	pr_info("noopt: deny_uid[%u]=%u\n", deny_uid_count - 1, uid);
 	return 0;
 }
 
@@ -199,7 +199,7 @@ static int parse_deny_uids(void)
 
 		ret = kstrtouint(item, 10, &uid);
 		if (ret) {
-			pr_warn("nohello: invalid deny uid %s\n", item);
+			pr_warn("noopt: invalid deny uid %s\n", item);
 			continue;
 		}
 
@@ -209,7 +209,7 @@ static int parse_deny_uids(void)
 	kfree(buf);
 
 	if (active_scope == SCOPE_DENY && !deny_uid_count)
-		pr_warn("nohello: scope_mode=deny but deny_uids is empty\n");
+		pr_warn("noopt: scope_mode=deny but deny_uids is empty\n");
 
 	return 0;
 }
@@ -221,13 +221,13 @@ static int add_target_path(const char *path_name)
 	int ret;
 
 	if (target_count >= MAX_HIDE_TARGETS) {
-		pr_warn("nohello: too many targets, skip %s\n", path_name);
+		pr_warn("noopt: too many targets, skip %s\n", path_name);
 		return -ENOSPC;
 	}
 
 	ret = kern_path(path_name, 0, &path);
 	if (ret) {
-		pr_warn("nohello: %s not found (err=%d), skip\n", path_name,
+		pr_warn("noopt: %s not found (err=%d), skip\n", path_name,
 			ret);
 		return ret;
 	}
@@ -237,7 +237,7 @@ static int add_target_path(const char *path_name)
 	targets[target_count].dev = inode->i_sb->s_dev;
 	strscpy(targets[target_count].path, path_name,
 		sizeof(targets[target_count].path));
-	pr_info("nohello: target[%u] %s ino=%llu dev=%u:%u\n",
+	pr_info("noopt: target[%u] %s ino=%llu dev=%u:%u\n",
 		target_count, path_name, targets[target_count].ino,
 		MAJOR(targets[target_count].dev),
 		MINOR(targets[target_count].dev));
@@ -307,8 +307,14 @@ static int getattr_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 {
 	struct inode_perm_data *d = (struct inode_perm_data *)ri->data;
 	struct path *path = (struct path *)regs->regs[0]; /* x0 */
-	struct inode *inode = d_inode(path->dentry);
+	struct inode *inode;
 
+	if (!path || !path->dentry) {
+		d->matched = 0;
+		return 0;
+	}
+
+	inode = d_inode(path->dentry);
 	d->matched = should_hide_for_current() && is_target_inode(inode);
 	return 0;
 }
@@ -385,7 +391,7 @@ static int getdents_exit(struct kretprobe_instance *ri, struct pt_regs *regs)
 		goto out;
 
 	if ((size_t)ret > d->kbuf_len) {
-		pr_debug_ratelimited("nohello: getdents return too large "
+		pr_debug_ratelimited("noopt: getdents return too large "
 				     "(%ld > %zu), skip filtering\n",
 				     ret, d->kbuf_len);
 		goto out;
@@ -432,7 +438,7 @@ static int getdents_exit(struct kretprobe_instance *ri, struct pt_regs *regs)
 
 	if (modified) {
 		if (copy_to_user(d->dirent, kbuf, new_len))
-			pr_warn_ratelimited("nohello: copy_to_user failed, "
+			pr_warn_ratelimited("noopt: copy_to_user failed, "
 					    "directory may leak\n");
 		else
 			regs->regs[0] = new_len;
@@ -446,7 +452,7 @@ out:
 }
 
 /* ---------- module init / exit ---------- */
-static int __init nohello_init(void)
+static int __init noopt_init(void)
 {
 	const char *paths = target_paths[0] ? target_paths : target_path;
 	int ret;
@@ -461,7 +467,7 @@ static int __init nohello_init(void)
 
 	ret = resolve_target_paths(paths);
 	if (ret) {
-		pr_err("nohello: no valid targets (err=%d)\n", ret);
+		pr_err("noopt: no valid targets (err=%d)\n", ret);
 		return ret;
 	}
 
@@ -473,11 +479,11 @@ static int __init nohello_init(void)
 	kp_inode_perm.maxactive = 40;
 	ret = register_kretprobe(&kp_inode_perm);
 	if (ret) {
-		pr_err("nohello: register_kretprobe(security_inode_permission) "
+		pr_err("noopt: register_kretprobe(security_inode_permission) "
 		       "failed: %d\n", ret);
 		return ret;
 	}
-	pr_info("nohello: hooked security_inode_permission\n");
+	pr_info("noopt: hooked security_inode_permission\n");
 
 	/* security_inode_getattr */
 	kp_inode_getattr.kp.symbol_name = "security_inode_getattr";
@@ -487,12 +493,12 @@ static int __init nohello_init(void)
 	kp_inode_getattr.maxactive = 40;
 	ret = register_kretprobe(&kp_inode_getattr);
 	if (ret) {
-		pr_err("nohello: register_kretprobe(security_inode_getattr) "
+		pr_err("noopt: register_kretprobe(security_inode_getattr) "
 		       "failed: %d\n", ret);
 		unregister_kretprobe(&kp_inode_perm);
 		return ret;
 	}
-	pr_info("nohello: hooked security_inode_getattr\n");
+	pr_info("noopt: hooked security_inode_getattr\n");
 
 	if (hide_dirents) {
 		/* __arm64_sys_getdents64 */
@@ -503,26 +509,26 @@ static int __init nohello_init(void)
 		kp_getdents.maxactive = 20;
 		ret = register_kretprobe(&kp_getdents);
 		if (ret) {
-			pr_warn("nohello: register_kretprobe(__arm64_sys_getdents64) "
+			pr_warn("noopt: register_kretprobe(__arm64_sys_getdents64) "
 				"failed: %d; file visible in listings but still "
 				"hidden from direct access\n",
 				ret);
 		} else {
 			getdents_registered = true;
-			pr_info("nohello: hooked __arm64_sys_getdents64\n");
+			pr_info("noopt: hooked __arm64_sys_getdents64\n");
 		}
 	} else {
-		pr_info("nohello: hide_dirents=0, directory listings are "
+		pr_info("noopt: hide_dirents=0, directory listings are "
 			"not filtered\n");
 	}
 
-	pr_info("nohello: loaded -- %u target(s) hidden, scope=%s, "
+	pr_info("noopt: loaded -- %u target(s) hidden, scope=%s, "
 		"deny_uid_count=%u hide_isolated=%d\n",
 		target_count, scope_mode, deny_uid_count, hide_isolated);
 	return 0;
 }
 
-static void __exit nohello_exit(void)
+static void __exit noopt_exit(void)
 {
 	unregister_kretprobe(&kp_inode_perm);
 	unregister_kretprobe(&kp_inode_getattr);
@@ -531,12 +537,12 @@ static void __exit nohello_exit(void)
 		getdents_registered = false;
 	}
 
-	pr_info("nohello: unloaded -- %u target(s) visible again\n",
+	pr_info("noopt: unloaded -- %u target(s) visible again\n",
 		target_count);
 }
 
-module_init(nohello_init);
-module_exit(nohello_exit);
+module_init(noopt_init);
+module_exit(noopt_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("lkm-build");
