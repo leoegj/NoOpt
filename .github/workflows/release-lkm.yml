@@ -1,0 +1,64 @@
+name: Build & Release All Kernels
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-lkm:
+    strategy:
+      matrix:
+        kmi:
+          - android12-5.10
+          - android13-5.10
+          - android13-5.15
+          - android14-5.15
+          - android14-6.1
+          - android15-6.6
+          - android16-6.12
+    uses: ./.github/workflows/ddk-lkm.yml
+    with:
+      kmi: ${{ matrix.kmi }}
+      ddk_release: '20260313'
+
+  release:
+    needs: build-lkm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release
+          find artifacts -type f \( -name "*.ko" -o -name "*.zip" \) -exec cp {} release/ \;
+          ls -la release/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: NoOpt ${{ github.ref_name }}
+          body: |
+            ## NoOpt ${{ github.ref_name }}
+
+            ### Supported KMI targets
+            - android12-5.10
+            - android13-5.10
+            - android13-5.15
+            - android14-5.15
+            - android14-6.1
+            - android15-6.6
+            - android16-6.12
+
+            ### Assets
+            - `*_noopt.ko` — Standalone kernel module
+            - `*_noopt-ksu.zip` — KernelSU module zip (flashable)
+          files: release/*
+          generate_release_notes: true

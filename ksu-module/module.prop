@@ -2,5 +2,5 @@ id=noopt-demo
 name=NoOpt
 version=1.4.0
 versionCode=7
-author=lkm-build
-description=Loads noopt.ko with persistent /data/adb config, hidden paths, and App blacklist WebUI.
+author=Andrea-lyz & Yon8
+description=hidden paths, and App blacklist WebUI https://github.com/Yon8/NoOpt
