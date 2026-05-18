@@ -1,302 +1,167 @@
-# NoHello LKM Demo
+# NoOpt
 
-NoHello is a small Android arm64 / GKI external kernel module demo. It hides
-configured file paths from common filesystem operations by resolving target
-inodes at load time and installing kretprobes around VFS-related paths.
+[中文版本](#noopt中文)
 
-This repository is intended for controlled lab/demo use on your own device or
-another device where you have explicit permission.
+A lightweight Android arm64 / GKI external kernel module that hides configured file paths from common filesystem operations. It resolves target inodes at load time and installs kretprobes around VFS-related paths.
 
-## What It Builds
+> This repository is intended for controlled lab/demo use on your own device or another device where you have explicit permission.
 
-- `kernel/nohello.c`: kernel module source.
-- `kernel/Kbuild`: declares the external module target.
-- `kernel/Makefile`: invokes the Android/GKI kernel build tree.
-- `ksu-module/`: a minimal KernelSU module wrapper that loads `nohello.ko`.
-- `ksu-module/webroot/`: KernelSU WebUI for editing paths and App blacklist.
-- `tools/package_ksu.ps1` and `tools/package_ksu.sh`: package helpers.
-- `.github/workflows/`: GitHub Actions builds for multiple Android KMI targets.
+## Features
 
-The default demo target is:
+- Hides direct access via `security_inode_permission`
+- Hides stat/getattr checks via `security_inode_getattr`
+- Filters `getdents64` results to remove targets from directory listings
+- Supports up to 16 target paths per module load
+- Supports `scope_mode=global` and `scope_mode=deny` (hide only from configured UIDs)
+- KernelSU module wrapper with WebUI for managing paths, app blacklist, UID blacklist, and scope mode
+- Persistent config under `/data/adb/noopt` survives module updates
+- GitHub Actions CI builds for all GKI KMI targets
 
-```text
-/dev/cpuset/AppOpt
-/data/system/junge
-```
+## Supported KMI Targets
 
-The KernelSU package defaults to deny scope for:
-
-```text
-com.chunqiunativecheck
-com.eltavine.duckdetector
-luna.safe.luna
-```
-
-You can override it at load time with the legacy single-path parameter:
-
-```sh
-insmod /data/local/tmp/nohello.ko target_path=/data/local/tmp/nohello
-```
-
-For multiple paths, use `target_paths` with comma-separated absolute paths:
-
-```sh
-insmod /data/local/tmp/nohello.ko target_paths=/data/local/tmp/a,/data/local/tmp/b
-```
-
-Directory listing filtering can be disabled while keeping direct access hidden:
-
-```sh
-insmod /data/local/tmp/nohello.ko target_paths=/data/local/tmp/a,/data/local/tmp/b hide_dirents=0
-```
-
-To hide only from selected app UIDs, use deny scope:
-
-```sh
-insmod /data/local/tmp/nohello.ko target_paths=/data/local/tmp/a scope_mode=deny deny_uids=10123,10124
-```
-
-## Current Status
-
-The project is demo-ready, but it is not a production hardening project.
-
-Implemented:
-
-- Hides direct access through `security_inode_permission`.
-- Hides stat/getattr-style checks through `security_inode_getattr`.
-- Filters `getdents64` results so the target is removed from directory lists.
-- Supports up to 16 configured target paths per module load.
-- Supports `scope_mode=global` and `scope_mode=deny`. Deny scope hides only
-  from configured app UIDs.
-- Provides a KernelSU wrapper template for boot-time loading.
-- Provides a KernelSU WebUI for managing paths, App blacklist, direct UID
-  blacklist, scope mode, and `hide_dirents`.
-- Stores KernelSU runtime config under `/data/adb/nohello`, so WebUI edits
-  survive module updates and reinstalls.
-- Provides a `hide_dirents` fallback parameter. Set it to `0` if directory
-  enumeration is unstable on a device.
-
-Known limitations:
-
-- At least one target path must exist before `insmod`, because the module
-  stores `(dev, inode)` identities at load time. Missing paths are skipped.
-- Directory-list filtering compares `d_ino`, because `getdents64` does not
-  expose the device id in each returned entry. A same-inode file on another
-  filesystem could be hidden from a listing, though direct access checks still
-  use both dev and inode.
-- Existing open file descriptors are not hidden retroactively.
-- The module must match the device KMI/kernel version and arm64 ABI.
-- `scope_mode=deny` requires app UIDs to be resolved before module load. The
-  KernelSU service resolves package names from `deny_packages.conf`.
-- Directory-list filtering is the riskiest part of this demo because it edits
-  the `getdents64` user buffer after the syscall returns. If `ls` appears to
-  hang, unload the module and retry with `hide_dirents=0`.
-- Proc mount text files such as `/proc/*/mountinfo` and `/proc/*/mounts` are
-  not filtered in this branch.
+| Target | Kernel |
+|--------|--------|
+| android12-5.10 | 5.10 |
+| android13-5.10 | 5.10 |
+| android13-5.15 | 5.15 |
+| android14-5.15 | 5.15 |
+| android14-6.1 | 6.1 |
+| android15-6.6 | 6.6 |
+| android16-6.12 | 6.12 |
 
 ## Build
 
 ### GitHub Actions
 
-Push to `main` or run the `Build LKM for All KMI Targets` workflow manually.
-Artifacts are named like:
+- **Release**: Push a `v*` tag or manually trigger the `Build & Release All Kernels` workflow to compile all targets and publish a GitHub Release.
+- **CI Build**: Triggered on pull requests or manual dispatch via `Build LKM for All KMI Targets`.
 
-```text
-android15-6.6_nohello.ko
-```
-
-Pick the artifact that matches your device KMI.
-
-### Local DDK/Kernel Build
-
-If your DDK container exports `KDIR`, run:
+### Local Build
 
 ```sh
 cd kernel
 CONFIG_KSU=m CC=clang make
 ```
 
-If you have a kernel build directory locally, pass it explicitly:
+Output: `kernel/noopt.ko`
+
+## Usage
+
+```sh
+# Single path
+insmod noopt.ko target_path=/data/local/tmp/secret
+
+# Multiple paths
+insmod noopt.ko target_paths=/data/local/tmp/a,/data/local/tmp/b
+
+# Deny scope (hide only from specific UIDs)
+insmod noopt.ko target_paths=/data/local/tmp/a scope_mode=deny deny_uids=10123,10124
+
+# Disable directory listing filter
+insmod noopt.ko target_paths=/data/local/tmp/a hide_dirents=0
+```
+
+## KernelSU Module
+
+Install the `*_noopt-ksu.zip` from Releases in KernelSU Manager. The WebUI is available after installation for managing all settings without rebooting.
+
+Package manually:
+
+```sh
+# Linux/macOS
+./tools/package_ksu.sh kernel/noopt.ko out/noopt-ksu.zip
+
+# Windows PowerShell
+.\tools\package_ksu.ps1 -KoPath .\kernel\noopt.ko -Output .\out\noopt-ksu.zip
+```
+
+## Known Limitations
+
+- Target paths must exist before `insmod` (missing paths are skipped)
+- Existing open file descriptors are not hidden retroactively
+- Module must match device KMI/kernel version and arm64 ABI
+- `/proc/*/mountinfo` and `/proc/*/mounts` are not filtered
+
+---
+
+# NoOpt（中文）
+
+一个轻量级 Android arm64 / GKI 外部内核模块，用于隐藏指定文件路径，使其在常见文件系统操作中不可见。模块在加载时解析目标 inode，并在 VFS 相关路径上安装 kretprobe。
+
+> 本仓库仅供在您自己的设备或已获得明确授权的设备上进行受控实验/演示使用。
+
+## 功能特性
+
+- 通过 `security_inode_permission` 隐藏直接访问
+- 通过 `security_inode_getattr` 隐藏 stat/getattr 检查
+- 过滤 `getdents64` 结果，从目录列表中移除目标项
+- 每次加载支持最多 16 个目标路径
+- 支持 `scope_mode=global`（全局）和 `scope_mode=deny`（仅对配置的 UID 隐藏）
+- KernelSU 模块封装，带 WebUI 管理路径、应用黑名单、UID 黑名单和作用范围
+- 持久化配置存储在 `/data/adb/noopt`，模块更新后配置不丢失
+- GitHub Actions CI 自动编译所有 GKI KMI 目标
+
+## 支持的 KMI 目标
+
+| 目标 | 内核版本 |
+|------|----------|
+| android12-5.10 | 5.10 |
+| android13-5.10 | 5.10 |
+| android13-5.15 | 5.15 |
+| android14-5.15 | 5.15 |
+| android14-6.1 | 6.1 |
+| android15-6.6 | 6.6 |
+| android16-6.12 | 6.12 |
+
+## 编译
+
+### GitHub Actions
+
+- **发布**：推送 `v*` tag 或手动触发 `Build & Release All Kernels` 工作流，自动编译所有目标并创建 GitHub Release。
+- **CI 编译**：在 Pull Request 或手动触发时运行 `Build LKM for All KMI Targets`。
+
+### 本地编译
 
 ```sh
 cd kernel
-make KDIR=/path/to/kernel/build
+CONFIG_KSU=m CC=clang make
 ```
 
-The output is:
+输出：`kernel/noopt.ko`
 
-```text
-kernel/nohello.ko
-```
-
-## Manual Test
-
-On the device:
+## 使用方法
 
 ```sh
-adb shell
-su
-echo "demo secret" > /data/local/tmp/nohello
-ls -l /data/local/tmp/nohello
-cat /data/local/tmp/nohello
+# 单路径
+insmod noopt.ko target_path=/data/local/tmp/secret
+
+# 多路径
+insmod noopt.ko target_paths=/data/local/tmp/a,/data/local/tmp/b
+
+# 黑名单模式（仅对指定 UID 隐藏）
+insmod noopt.ko target_paths=/data/local/tmp/a scope_mode=deny deny_uids=10123,10124
+
+# 禁用目录列表过滤
+insmod noopt.ko target_paths=/data/local/tmp/a hide_dirents=0
 ```
 
-Push and load the module:
+## KernelSU 模块
+
+从 Releases 下载 `*_noopt-ksu.zip`，在 KernelSU 管理器中安装。安装后可通过 WebUI 管理所有设置，无需重启。
+
+手动打包：
 
 ```sh
-adb push kernel/nohello.ko /data/local/tmp/nohello.ko
-adb shell
-su
-insmod /data/local/tmp/nohello.ko target_path=/data/local/tmp/nohello
-dmesg | grep nohello
+# Linux/macOS
+./tools/package_ksu.sh kernel/noopt.ko out/noopt-ksu.zip
+
+# Windows PowerShell
+.\tools\package_ksu.ps1 -KoPath .\kernel\noopt.ko -Output .\out\noopt-ksu.zip
 ```
 
-To hide multiple paths manually:
+## 已知限制
 
-```sh
-insmod /data/local/tmp/nohello.ko target_paths=/data/local/tmp/a,/data/local/tmp/b
-```
-
-To hide only from one app UID:
-
-```sh
-insmod /data/local/tmp/nohello.ko target_paths=/data/local/tmp/a scope_mode=deny deny_uids=10123
-```
-
-Verify:
-
-```sh
-ls -l /data/local/tmp/nohello
-cat /data/local/tmp/nohello
-stat /data/local/tmp/nohello
-ls -la /data/local/tmp
-```
-
-Unload:
-
-```sh
-rmmod nohello
-```
-
-## KernelSU Package
-
-`nohello.ko` is not installed directly in KernelSU. KernelSU installs a module
-zip, and that zip contains `nohello.ko` plus a `service.sh` script that calls
-`insmod`.
-
-Windows PowerShell:
-
-```powershell
-.\tools\package_ksu.ps1 -KoPath .\kernel\nohello.ko -Output .\out\nohello-ksu.zip
-```
-
-By default this packages `/dev/cpuset/AppOpt` and `/data/system/junge` with
-`scope_mode=deny` for `com.chunqiunativecheck`, `com.eltavine.duckdetector`,
-and `luna.safe.luna`.
-
-Pass comma-separated values to `-TargetPath` for a multi-path package:
-
-```powershell
-.\tools\package_ksu.ps1 -KoPath .\kernel\nohello.ko -Output .\out\nohello-ksu.zip -TargetPath "/data/local/tmp/a,/data/local/tmp/b"
-```
-
-Use `-HideDirents 0` if you want direct-access hiding only.
-
-Use `-ScopeMode deny` and `-DenyPackage` / `-DenyUid` for a blacklist package:
-
-```powershell
-.\tools\package_ksu.ps1 -KoPath .\kernel\nohello.ko -Output .\out\nohello-ksu.zip -TargetPath "/system_ext/app/SoterService,/system/app/EasterEgg" -ScopeMode deny -DenyPackage "com.example.detector"
-```
-
-Linux/macOS shell:
-
-```sh
-./tools/package_ksu.sh kernel/nohello.ko out/nohello-ksu.zip
-```
-
-For multiple paths:
-
-```sh
-TARGET_PATHS=/data/local/tmp/a,/data/local/tmp/b ./tools/package_ksu.sh kernel/nohello.ko out/nohello-ksu.zip
-```
-
-Use `HIDE_DIRENTS=0` if you want direct-access hiding only.
-
-Use `SCOPE_MODE=deny` with package names or UIDs for blacklist mode:
-
-```sh
-SCOPE_MODE=deny DENY_PACKAGES=com.example.detector DENY_UIDS=10123 ./tools/package_ksu.sh kernel/nohello.ko out/nohello-ksu.zip
-```
-
-Runtime config lives in `/data/adb/nohello`. On first boot, `service.sh` seeds
-that folder from the module defaults and then reads from the persistent folder.
-`target_path.conf` supports one path per line:
-
-```text
-/data/local/tmp/a
-/data/local/tmp/b
-```
-
-Blacklist config files:
-
-```text
-scope_mode.conf       # global or deny
-hide_dirents.conf     # 1 or 0
-deny_packages.conf    # one package name per line
-deny_uids.conf        # one UID per line
-target_wait_seconds.conf
-package_wait_seconds.conf
-```
-
-The WebUI is available from KernelSU Manager after installing the module. It
-edits the persistent `/data/adb/nohello` files and can reload `nohello.ko`
-without requiring a reboot.
-
-In deny scope, `service.sh` waits for package UID resolution before loading.
-It also waits for configured paths so late-created `/dev` entries have a chance
-to exist before `nohello.ko` resolves target inodes.
-
-Paths that do not exist when `nohello.ko` loads are skipped. For dynamic paths
-such as `/data/incremental/...`, open the WebUI and use `Save & Reload` after
-the path exists, or reload manually. The WebUI uses short waits during manual
-reloads to keep the page responsive.
-
-Install `out/nohello-ksu.zip` in KernelSU Manager, reboot, then check:
-
-```sh
-su
-dmesg | grep nohello
-```
-
-To package a safer direct-access-only build:
-
-```powershell
-.\tools\package_ksu.ps1 -KoPath .\kernel\nohello.ko -Output .\out\nohello-ksu-direct.zip -TargetPath /data/local/tmp/nohello -HideDirents 0
-```
-
-You can also change it on the device after installation:
-
-```sh
-su
-echo 0 > /data/adb/nohello/hide_dirents.conf
-reboot
-```
-
-## Use Your Own Module
-
-Replace `kernel/nohello.c` with your module source and update `kernel/Kbuild`.
-For a single source file:
-
-```makefile
-obj-m += mymod.o
-```
-
-For multiple source files:
-
-```makefile
-obj-m += mymod.o
-mymod-y := mymod_main.o mymod_hook.o mymod_util.o
-```
-
-Then update the KernelSU template and package scripts if your output module is
-not named `nohello.ko`.
+- 目标路径必须在 `insmod` 前存在（不存在的路径会被跳过）
+- 已打开的文件描述符不会被追溯隐藏
+- 模块必须匹配设备的 KMI/内核版本和 arm64 ABI
+- 不过滤 `/proc/*/mountinfo` 和 `/proc/*/mounts`
