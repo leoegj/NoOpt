@@ -1,6 +1,17 @@
 name: Build KernelSU Kernel Module (DDK)
 
 on:
+  workflow_dispatch:
+    inputs:
+      kmi:
+        description: 'KMI version'
+        required: true
+        type: string
+      ddk_release:
+        description: 'DDK release version'
+        required: false
+        default: '20260313'
+        type: string
   workflow_call:
     inputs:
       kmi:
