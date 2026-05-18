@@ -76,6 +76,52 @@ static enum noopt_scope_mode active_scope = SCOPE_GLOBAL;
 static uid_t deny_uid_list[MAX_DENY_UIDS];
 static unsigned int deny_uid_count;
 
+/*
+ * Some OEM kernels (e.g. OnePlus / Oppo Pineapple, MiUI, etc.) trim or hide
+ * kern_path() and path_put() from the vendor module symbol table even though
+ * the GKI source-level build accepts them.  Calling them directly then makes
+ * insmod fail with "Unknown symbol kern_path (err -2)".  Resolve their
+ * addresses through kprobe at runtime and call them via function pointers so
+ * we never declare an external dependency on those symbols.
+ */
+typedef int (*kern_path_fn_t)(const char *name, unsigned int flags,
+			      struct path *path);
+typedef void (*path_put_fn_t)(const struct path *path);
+
+static kern_path_fn_t kern_path_fn;
+static path_put_fn_t path_put_fn;
+
+static unsigned long resolve_kernel_symbol(const char *name)
+{
+	struct kprobe kp = { .symbol_name = name };
+	unsigned long addr;
+	int ret;
+
+	ret = register_kprobe(&kp);
+	if (ret < 0) {
+		pr_err("noopt: kprobe lookup of %s failed: %d\n", name, ret);
+		return 0;
+	}
+
+	addr = (unsigned long)kp.addr;
+	unregister_kprobe(&kp);
+	return addr;
+}
+
+static int resolve_vfs_helpers(void)
+{
+	kern_path_fn = (kern_path_fn_t)resolve_kernel_symbol("kern_path");
+	path_put_fn = (path_put_fn_t)resolve_kernel_symbol("path_put");
+
+	if (!kern_path_fn || !path_put_fn) {
+		pr_err("noopt: cannot resolve VFS helpers (kern_path=%p path_put=%p)\n",
+		       kern_path_fn, path_put_fn);
+		return -ENOENT;
+	}
+
+	return 0;
+}
+
 /* ---------- helper ---------- */
 static inline bool is_target_inode(const struct inode *inode)
 {
@@ -225,7 +271,7 @@ static int add_target_path(const char *path_name)
 		return -ENOSPC;
 	}
 
-	ret = kern_path(path_name, 0, &path);
+	ret = kern_path_fn(path_name, 0, &path);
 	if (ret) {
 		pr_warn("noopt: %s not found (err=%d), skip\n", path_name,
 			ret);
@@ -242,7 +288,7 @@ static int add_target_path(const char *path_name)
 		MAJOR(targets[target_count].dev),
 		MINOR(targets[target_count].dev));
 	target_count++;
-	path_put(&path);
+	path_put_fn(&path);
 
 	return 0;
 }
@@ -462,6 +508,10 @@ static int __init noopt_init(void)
 		return ret;
 
 	ret = parse_deny_uids();
+	if (ret)
+		return ret;
+
+	ret = resolve_vfs_helpers();
 	if (ret)
 		return ret;
 
