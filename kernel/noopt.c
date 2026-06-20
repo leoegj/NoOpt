@@ -18,6 +18,7 @@
 #include <linux/fs.h>
 #include <linux/namei.h>
 #include <linux/version.h>
+#include <linux/delay.h>
 #include <linux/dirent.h>
 #include <linux/slab.h>
 #include <linux/string.h>
