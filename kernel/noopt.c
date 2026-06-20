@@ -87,52 +87,20 @@ static unsigned int deny_uid_count;
  * Some OEM kernels (e.g. OnePlus / Oppo Pineapple, MiUI, etc.) trim or hide
  * kern_path() and path_put() from the vendor module symbol table even though
  * the GKI source-level build accepts them.  Calling them directly then makes
- * insmod fail with "Unknown symbol kern_path (err -2)".  Resolve their
- * addresses through kprobe at runtime and call them via function pointers so
- * we never declare an external dependency on those symbols.
+ * insmod fail with "Unknown symbol kern_path (err -2)".
+ *
+ * For Xiaomi 13 Fuxi kernels these symbols ARE exported (CONFIG_KPROBES=y).
+ * We call them directly via extern declaration, avoiding the CFI risk from
+ * kprobe-resolved function pointers (CFI_CLANG strict mode rejects calls
+ * through kprobe-obtained addresses unless the module is built with
+ * matching CFI hashes, which is impractical cross-build).
  */
-typedef int (*kern_path_fn_t)(const char *name, unsigned int flags,
-			      struct path *path);
-typedef void (*path_put_fn_t)(const struct path *path);
-
-static kern_path_fn_t kern_path_fn;
-static path_put_fn_t path_put_fn;
-
-static unsigned long resolve_kernel_symbol(const char *name)
-{
-	struct kprobe kp = { .symbol_name = name };
-	unsigned long addr;
-	int ret;
-
-	ret = register_kprobe(&kp);
-	if (ret < 0) {
-		pr_err("noopt: kprobe lookup of %s failed: %d\n", name, ret);
-		return 0;
-	}
-
-	addr = (unsigned long)kp.addr;
-	unregister_kprobe(&kp);
-	return addr;
-}
+extern int kern_path(const char *name, unsigned int flags, struct path *path);
+extern void path_put(const struct path *path);
 
 static int resolve_vfs_helpers(void)
 {
-	unsigned long addr;
-
-	addr = resolve_kernel_symbol("kern_path");
-	if (!addr || addr < 0xffff000000000000ULL) {
-		pr_err("noopt: invalid kern_path address 0x%lx\n", addr);
-		return -ENOENT;
-	}
-	kern_path_fn = (kern_path_fn_t)addr;
-
-	addr = resolve_kernel_symbol("path_put");
-	if (!addr || addr < 0xffff000000000000ULL) {
-		pr_err("noopt: invalid path_put address 0x%lx\n", addr);
-		return -ENOENT;
-	}
-	path_put_fn = (path_put_fn_t)addr;
-
+	/* No runtime resolution needed - symbols are directly linked */
 	return 0;
 }
 
@@ -285,7 +253,7 @@ static int add_target_path(const char *path_name)
 		return -ENOSPC;
 	}
 
-	ret = kern_path_fn(path_name, 0, &path);
+	ret = kern_path(path_name, 0, &path);
 	if (ret) {
 		pr_warn("noopt: %s not found (err=%d), skip\n", path_name,
 			ret);
@@ -302,7 +270,7 @@ static int add_target_path(const char *path_name)
 		MAJOR(targets[target_count].dev),
 		MINOR(targets[target_count].dev));
 	target_count++;
-	path_put_fn(&path);
+	path_put(&path);
 
 	return 0;
 }
