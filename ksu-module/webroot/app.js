@@ -37,6 +37,7 @@ const $ = (selector) => document.querySelector(selector);
 const pathList = $("#pathList");
 const appList = $("#appList");
 const statusText = $("#statusText");
+const statusDot = $("#statusDot");
 const toast = $("#toast");
 const actionButtons = [
 	$("#refreshBtn"),
@@ -45,6 +46,8 @@ const actionButtons = [
 	$("#reloadBtn"),
 	$("#addPathBtn"),
 ];
+
+let moduleStatusTimer = null;
 
 function shellQuote(value) {
 	return `'${String(value).replace(/'/g, "'\\''")}'`;
@@ -130,6 +133,25 @@ async function runAction(message, action) {
 
 async function readFile(path) {
 	return execShell(`[ -f ${shellQuote(path)} ] && cat ${shellQuote(path)} || true`);
+}
+
+async function updateModuleStatus() {
+	try {
+		const procText = await execShell("grep '^noopt ' /proc/modules || true");
+		const loaded = procText.trim().length > 0;
+		statusDot.className = loaded ? "loaded" : "unloaded";
+		statusText.textContent = loaded ? "模块已加载" : "模块未加载";
+	} catch (_) {
+		// Silently ignore polling errors
+	}
+}
+
+function startModuleStatusPolling() {
+	if (moduleStatusTimer) clearInterval(moduleStatusTimer);
+	// Poll every 3 seconds for real-time status updates
+	moduleStatusTimer = setInterval(updateModuleStatus, 3000);
+	// Also do an immediate check
+	updateModuleStatus();
 }
 
 async function writeLines(path, lines) {
@@ -228,7 +250,6 @@ async function refreshConfig() {
 	const scopeText = await readFile(files.scope);
 	const pkgText = await readFile(files.denyPackages);
 	const uidText = await readFile(files.denyUids);
-	const procText = await execShell("grep '^noopt ' /proc/modules || true");
 
 	renderPaths(linesFromText(targetText));
 	$("#hideDirentsInput").checked = (hideText.trim() || "1") !== "0";
@@ -237,7 +258,7 @@ async function refreshConfig() {
 	const packageLines = linesFromText(pkgText);
 	selectedPackages = new Set(packageLines.length ? packageLines : DEFAULT_DENY_PACKAGES);
 	$("#denyUidsInput").value = linesFromText(uidText).join("\n");
-	statusText.textContent = procText.trim() ? "模块已加载" : "模块未加载";
+	await updateModuleStatus();
 	renderApps();
 }
 
@@ -299,3 +320,6 @@ runAction("正在读取配置...", refreshConfig).catch((error) => {
 	statusText.textContent = "读取失败";
 	showToast(error.message);
 });
+
+// Start real-time module status polling
+startModuleStatusPolling();
