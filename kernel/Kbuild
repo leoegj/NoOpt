@@ -3,6 +3,6 @@ obj-m += noopt.o
 ccflags-y += -Wno-strict-prototypes -Wno-int-conversion
 ccflags-y += -Wno-gcc-compat -Wno-missing-prototypes
 ccflags-y += -Wno-declaration-after-statement -Wno-unused-function
-ccflags-y += -fno-sanitize=cfi -fno-sanitize=kcfi
+ccflags-y += -fno-sanitize=cfi
 
 # Keep a new line here!! Because someone may append config
