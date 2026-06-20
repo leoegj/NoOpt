@@ -72,6 +72,26 @@ h2 {
 	color: color-mix(in srgb, CanvasText 68%, transparent);
 }
 
+#statusDot {
+	display: inline-block;
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	margin-right: 6px;
+	vertical-align: middle;
+	transition: background 0.3s, box-shadow 0.3s;
+}
+
+#statusDot.loaded {
+	background: #3498db;
+	box-shadow: 0 0 6px rgba(52, 152, 219, 0.5);
+}
+
+#statusDot.unloaded {
+	background: #e74c3c;
+	box-shadow: 0 0 6px rgba(231, 76, 60, 0.5);
+}
+
 main {
 	display: grid;
 	gap: 14px;
