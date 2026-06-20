@@ -24,6 +24,8 @@
 #include <linux/string.h>
 #include <linux/uidgid.h>
 #include <linux/uaccess.h>
+#include <linux/atomic.h>
+#include <linux/rcupdate.h>
 
 /* ---------- module parameter ---------- */
 #define MAX_HIDE_TARGETS 16
@@ -66,7 +68,7 @@ MODULE_PARM_DESC(deny_uids, "Comma-separated UIDs hidden from targets");
 
 
 /* Safe module unload: prevent new handlers during exit */
-static bool module_exiting = false;
+static atomic_t module_exiting = ATOMIC_INIT(0);
 
 /* system-unique target identifiers */
 struct hidden_target {
@@ -115,14 +117,21 @@ static unsigned long resolve_kernel_symbol(const char *name)
 
 static int resolve_vfs_helpers(void)
 {
-	kern_path_fn = (kern_path_fn_t)resolve_kernel_symbol("kern_path");
-	path_put_fn = (path_put_fn_t)resolve_kernel_symbol("path_put");
+	unsigned long addr;
 
-	if (!kern_path_fn || !path_put_fn) {
-		pr_err("noopt: cannot resolve VFS helpers (kern_path=%p path_put=%p)\n",
-		       kern_path_fn, path_put_fn);
+	addr = resolve_kernel_symbol("kern_path");
+	if (!addr || addr < 0xffff000000000000ULL) {
+		pr_err("noopt: invalid kern_path address 0x%lx\n", addr);
 		return -ENOENT;
 	}
+	kern_path_fn = (kern_path_fn_t)addr;
+
+	addr = resolve_kernel_symbol("path_put");
+	if (!addr || addr < 0xffff000000000000ULL) {
+		pr_err("noopt: invalid path_put address 0x%lx\n", addr);
+		return -ENOENT;
+	}
+	path_put_fn = (path_put_fn_t)addr;
 
 	return 0;
 }
@@ -403,11 +412,12 @@ static int getdents_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 	struct pt_regs *user_regs = (struct pt_regs *)regs->regs[0];
 	unsigned int count;
 
+	if (unlikely(atomic_read(&module_exiting)))
+		return 0;
+
 	d->dirent = NULL;
 	d->kbuf = NULL;
 	d->kbuf_len = 0;
-		if (module_exiting)
-			return 0;
 	d->scoped = should_hide_for_current();
 
 	if (!d->scoped)
@@ -424,7 +434,7 @@ static int getdents_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 	if (!count)
 		return 0;
 
-	d->kbuf = kmalloc(count, GFP_KERNEL);
+	d->kbuf = kmalloc(count, GFP_ATOMIC);
 	if (d->kbuf)
 		d->kbuf_len = count;
 	return 0;
@@ -501,8 +511,6 @@ out:
 	kfree(d->kbuf);
 	d->kbuf = NULL;
 	d->kbuf_len = 0;
-		if (module_exiting)
-			return 0;
 	return 0;
 }
 
@@ -589,9 +597,9 @@ static int __init noopt_init(void)
 
 static void __exit noopt_exit(void)
 {
-	module_exiting = true;
-	/* Wait for RCU and in-flight handlers */
-	msleep(500);
+	atomic_set(&module_exiting, 1);
+	/* Wait for all in-flight kretprobe handlers to drain */
+	synchronize_rcu();
 	unregister_kretprobe(&kp_inode_perm);
 	unregister_kretprobe(&kp_inode_getattr);
 	if (getdents_registered) {
