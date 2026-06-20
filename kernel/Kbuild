@@ -4,9 +4,4 @@ ccflags-y += -Wno-strict-prototypes -Wno-int-conversion
 ccflags-y += -Wno-gcc-compat -Wno-missing-prototypes
 ccflags-y += -Wno-declaration-after-statement -Wno-unused-function
 
-# Force-disable CFI for this module. ccflags-y is prepended before the
-# kernel's own CFLAGS_MODULE (which includes -fsanitize=cfi when
-# CONFIG_CFI_CLANG=y), so we must use per-object flags to override.
-CFLAGS_noopt.o := -fno-sanitize=cfi
-
 # Keep a new line here!! Because someone may append config
